@@ -38,7 +38,8 @@ MAX_PLANES = 8
 TARGET_FPS = 60
 API_INTERVAL = 15
 BLEND_DURATION = 1.0  # Seconds to blend from predicted to actual position
-TRAIL_WIDTH = 6  # Chunky trails for projector visibility
+TRAIL_WIDTH = 15  # Chunky trails for projector visibility
+PLANE_SIZE = 14  # Size of plane icon
 
 # Flight data
 flights = {}
@@ -104,6 +105,44 @@ def draw_trail(surface, trail):
         pygame.draw.line(surface, color, trail_list[i], trail_list[i + 1], TRAIL_WIDTH)
 
 
+def draw_plane(surface, x, y, heading, color, size):
+    """Draw a cute plane icon rotated to match heading"""
+    # Heading: 0=North, 90=East, 180=South, 270=West
+    # Convert to radians, adjust so 0 points up
+    angle = math.radians(heading)
+
+    # Plane shape points (pointing up when angle=0)
+    # Body, wings, tail - simple cartoon plane
+    s = size
+    points = [
+        (0, -s * 1.5),      # Nose
+        (s * 0.4, -s * 0.3),  # Right front
+        (s * 1.5, s * 0.2),   # Right wing tip
+        (s * 0.4, s * 0.3),   # Right wing back
+        (s * 0.3, s * 1.0),   # Right tail
+        (s * 0.8, s * 1.5),   # Right tail tip
+        (0, s * 1.1),         # Tail center
+        (-s * 0.8, s * 1.5),  # Left tail tip
+        (-s * 0.3, s * 1.0),  # Left tail
+        (-s * 0.4, s * 0.3),  # Left wing back
+        (-s * 1.5, s * 0.2),  # Left wing tip
+        (-s * 0.4, -s * 0.3), # Left front
+    ]
+
+    # Rotate and translate points
+    cos_a, sin_a = math.cos(angle), math.sin(angle)
+    rotated = []
+    for px, py in points:
+        rx = px * cos_a - py * sin_a + x
+        ry = px * sin_a + py * cos_a + y
+        rotated.append((rx, ry))
+
+    # Draw filled plane
+    pygame.draw.polygon(surface, color, rotated)
+    # Draw outline for definition
+    pygame.draw.polygon(surface, (min(color[0] + 40, 255), min(color[1] + 40, 255), min(color[2] + 40, 255)), rotated, 2)
+
+
 def create_initial_trail(lat, lon, alt, velocity, heading):
     """Project trail backwards based on velocity/heading"""
     trail = deque(maxlen=TRAIL_LENGTH)
@@ -132,7 +171,7 @@ def main():
         screen_width, screen_height = 1280, 720
         screen = pygame.display.set_mode((screen_width, screen_height), pygame.FULLSCREEN)
     else:
-        screen_width, screen_height = 800, 450
+        screen_width, screen_height = 1280, 720
         screen = pygame.display.set_mode((screen_width, screen_height))
 
     # Start background API thread
@@ -198,10 +237,25 @@ def main():
                         }
                     else:
                         f = flights[icao]
-                        # Start blending from current rendered position to new actual position
-                        f["blend_from_lat"] = f["render_lat"]
-                        f["blend_from_lon"] = f["render_lon"]
-                        f["blend_progress"] = 0.0
+                        # Check if new position is ahead of current position in heading direction
+                        # If behind, snap instead of blend to avoid sliding backwards
+                        heading_rad = math.radians(f["heading"])
+                        dx = lat - f["render_lat"]  # Delta in lat (roughly north)
+                        dy = lon - f["render_lon"]  # Delta in lon (roughly east)
+                        # Project onto heading direction (positive = ahead, negative = behind)
+                        forward = dx * math.cos(heading_rad) + dy * math.sin(heading_rad)
+
+                        if forward >= 0:
+                            # New position is ahead - blend smoothly
+                            f["blend_from_lat"] = f["render_lat"]
+                            f["blend_from_lon"] = f["render_lon"]
+                            f["blend_progress"] = 0.0
+                        else:
+                            # New position is behind - snap to avoid backwards sliding
+                            f["render_lat"] = lat
+                            f["render_lon"] = lon
+                            f["blend_progress"] = 1.0
+
                         # Update target position
                         f["lat"], f["lon"], f["alt"] = lat, lon, alt
                         f["velocity"], f["heading"] = velocity, heading
@@ -255,15 +309,14 @@ def main():
                 draw_trail(screen, f["trail"])
 
             cx, cy = int(f["sx"]), int(f["sy"])
-            pygame.gfxdraw.aacircle(screen, cx, cy, 5, PLANE_COLOR)
-            pygame.gfxdraw.filled_circle(screen, cx, cy, 5, PLANE_COLOR)
+            draw_plane(screen, cx, cy, f["heading"], PLANE_COLOR, PLANE_SIZE)
 
-            # Labels
+            # Labels (offset below the plane)
             name = f["callsign"] or icao.upper()
             label1 = font.render(name, True, TEXT_COLOR)
             label2 = font.render(f"({f['country'] or 'Unknown'})", True, TEXT_COLOR)
-            screen.blit(label1, (cx - label1.get_width() // 2, cy + 10))
-            screen.blit(label2, (cx - label2.get_width() // 2, cy + 26))
+            screen.blit(label1, (cx - label1.get_width() // 2, cy + PLANE_SIZE * 2))
+            screen.blit(label2, (cx - label2.get_width() // 2, cy + PLANE_SIZE * 2 + 16))
 
         pygame.display.flip()
         clock.tick(TARGET_FPS)
