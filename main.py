@@ -257,21 +257,18 @@ def main():
                         sx, sy = lat_lon_to_screen(lat, lon)
                         flights[icao] = {
                             "trail": create_initial_trail(lat, lon, alt, velocity, heading),
-                            "lat": lat, "lon": lon,  # For distance sorting
-                            "target_sx": sx, "target_sy": sy,  # Where API says plane is
+                            "lat": lat, "lon": lon,  # Current predicted position
+                            "velocity": velocity, "heading": heading,  # For continuous movement
                             "smooth_sx": sx, "smooth_sy": sy,  # Smoothed display position
-                            "heading": heading,
                             "callsign": callsign, "country": country,
                             "last_seen": now,
                             "color": color
                         }
                     else:
                         f = flights[icao]
-                        # Simply update target - smoothing handles the rest
-                        sx, sy = lat_lon_to_screen(lat, lon)
+                        # Update to real position and velocity
                         f["lat"], f["lon"] = lat, lon
-                        f["target_sx"], f["target_sy"] = sx, sy
-                        f["heading"] = heading
+                        f["velocity"], f["heading"] = velocity, heading
                         f["callsign"], f["country"] = callsign, country
                         f["last_seen"] = now
 
@@ -281,11 +278,21 @@ def main():
         except queue.Empty:
             pass  # No new data, continue rendering
 
-        # Update positions - simple smooth interpolation toward target
+        # Update positions
         for f in flights.values():
-            # Smoothly move toward target position
-            f["smooth_sx"] += (f["target_sx"] - f["smooth_sx"]) * SMOOTHING_FACTOR
-            f["smooth_sy"] += (f["target_sy"] - f["smooth_sy"]) * SMOOTHING_FACTOR
+            # Move predicted position based on velocity (keeps target moving between API updates)
+            if f["velocity"] > 0:
+                cos_lat = math.cos(math.radians(f["lat"]))
+                heading_rad = math.radians(f["heading"])
+                f["lat"] += f["velocity"] * math.cos(heading_rad) / 111000 * dt
+                f["lon"] += f["velocity"] * math.sin(heading_rad) / (111000 * cos_lat) * dt
+
+            # Calculate where the plane should be on screen
+            target_sx, target_sy = lat_lon_to_screen(f["lat"], f["lon"])
+
+            # Smoothly move display position toward target
+            f["smooth_sx"] += (target_sx - f["smooth_sx"]) * SMOOTHING_FACTOR
+            f["smooth_sy"] += (target_sy - f["smooth_sy"]) * SMOOTHING_FACTOR
 
             sx, sy = f["smooth_sx"], f["smooth_sy"]
 
