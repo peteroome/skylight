@@ -43,6 +43,7 @@ MAX_PLANES = 8
 TARGET_FPS = 60
 API_INTERVAL = 15
 BLEND_DURATION = 1.0  # Seconds to blend from predicted to actual position
+SMOOTHING_FACTOR = 0.08  # Lower = smoother but more lag (0.05-0.15 range)
 TRAIL_WIDTH = 15  # Chunky trails for projector visibility
 PLANE_SIZE = 35  # Size of plane icon
 
@@ -158,13 +159,13 @@ def draw_plane(surface, x, y, heading, color, size):
     def rotate_points(points):
         return [(px * cos_a - py * sin_a + x, px * sin_a + py * cos_a + y) for px, py in points]
 
-    # Draw all parts
-    highlight = (min(color[0] + 30, 255), min(color[1] + 30, 255), min(color[2] + 30, 255))
+    # Draw all parts with darker outline
+    outline = (max(color[0] - 60, 0), max(color[1] - 60, 0), max(color[2] - 60, 0))
 
     for shape in [wings, tail, fuselage]:  # Draw wings/tail first, fuselage on top
         rotated = rotate_points(shape)
         pygame.draw.polygon(surface, color, rotated)
-        pygame.draw.polygon(surface, highlight, rotated, 2)
+        pygame.draw.polygon(surface, outline, rotated, 2)
 
 
 def create_initial_trail(lat, lon, alt, velocity, heading):
@@ -254,6 +255,7 @@ def main():
                         color = PLANE_COLORS[plane_color_index % len(PLANE_COLORS)]
                         plane_color_index += 1
 
+                        sx, sy = lat_lon_to_screen(lat, lon)
                         flights[icao] = {
                             "trail": create_initial_trail(lat, lon, alt, velocity, heading),
                             "lat": lat, "lon": lon, "alt": alt,
@@ -262,7 +264,8 @@ def main():
                             "callsign": callsign, "country": country,
                             "last_seen": now,
                             "blend_progress": 1.0,  # No blending needed for new planes
-                            "color": color
+                            "color": color,
+                            "smooth_sx": sx, "smooth_sy": sy  # Smoothed screen position
                         }
                     else:
                         f = flights[icao]
@@ -318,7 +321,14 @@ def main():
                 f["render_lat"] = f["lat"]
                 f["render_lon"] = f["lon"]
 
-            sx, sy = lat_lon_to_screen(f["render_lat"], f["render_lon"])
+            # Calculate target screen position
+            target_sx, target_sy = lat_lon_to_screen(f["render_lat"], f["render_lon"])
+
+            # Smooth the screen position (low-pass filter)
+            f["smooth_sx"] += (target_sx - f["smooth_sx"]) * SMOOTHING_FACTOR
+            f["smooth_sy"] += (target_sy - f["smooth_sy"]) * SMOOTHING_FACTOR
+
+            sx, sy = f["smooth_sx"], f["smooth_sy"]
             f["sx"], f["sy"] = sx, sy
 
             # Add to trail if moved enough (deque auto-limits size)
