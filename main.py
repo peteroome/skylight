@@ -10,7 +10,7 @@ import queue
 from collections import deque
 
 # Configuration
-BACKGROUND_COLOR = (0, 0, 0)
+BACKGROUND_COLOR = (10, 15, 40)  # Deep night sky blue
 
 # Your location (73 Byne Rd, London SE26 5JG)
 HOME_LAT = 51.4229712
@@ -26,10 +26,15 @@ MAX_LON = HOME_LON + LON_SPAN
 LAT_RANGE = MAX_LAT - MIN_LAT
 LON_RANGE = MAX_LON - MIN_LON
 
-# Visual settings
-PLANE_COLOR = (90, 120, 180)
-TRAIL_COLOR = (80, 110, 170)
-TEXT_COLOR = (70, 100, 160)
+# Visual settings - plane colors cycle through these
+PLANE_COLORS = [
+    (220, 60, 60),    # Red
+    (230, 200, 50),   # Yellow
+    (60, 180, 90),    # Green
+    (70, 130, 220),   # Blue
+]
+TEXT_COLOR = (150, 160, 180)
+plane_color_index = 0  # Cycles through colors as new planes appear
 
 # Performance settings
 MAX_ALTITUDE = 12000
@@ -90,7 +95,7 @@ def distance_from_home(lat, lon):
     return dlat * dlat + dlon * dlon
 
 
-def draw_trail(surface, trail):
+def draw_trail(surface, trail, color):
     """Draw thick trail that fades from dim to bright"""
     n = len(trail)
     if n < 2:
@@ -98,11 +103,11 @@ def draw_trail(surface, trail):
 
     # Convert deque to list for indexing
     trail_list = list(trail)
-    r, g, b = TRAIL_COLOR
+    r, g, b = color
     for i in range(n - 1):
         fade = 0.2 + 0.8 * i / n
-        color = (int(r * fade), int(g * fade), int(b * fade))
-        pygame.draw.line(surface, color, trail_list[i], trail_list[i + 1], TRAIL_WIDTH)
+        trail_color = (int(r * fade), int(g * fade), int(b * fade))
+        pygame.draw.line(surface, trail_color, trail_list[i], trail_list[i + 1], TRAIL_WIDTH)
 
 
 def draw_plane(surface, x, y, heading, color, size):
@@ -181,7 +186,7 @@ def create_initial_trail(lat, lon, alt, velocity, heading):
 
 
 def main():
-    global flights, screen_width, screen_height
+    global flights, screen_width, screen_height, plane_color_index
 
     pygame.init()
     on_pi = platform.machine().startswith('arm')
@@ -245,6 +250,10 @@ def main():
                         continue
 
                     if icao not in flights:
+                        # Assign next color in cycle
+                        color = PLANE_COLORS[plane_color_index % len(PLANE_COLORS)]
+                        plane_color_index += 1
+
                         flights[icao] = {
                             "trail": create_initial_trail(lat, lon, alt, velocity, heading),
                             "lat": lat, "lon": lon, "alt": alt,
@@ -252,7 +261,8 @@ def main():
                             "velocity": velocity, "heading": heading,
                             "callsign": callsign, "country": country,
                             "last_seen": now,
-                            "blend_progress": 1.0  # No blending needed for new planes
+                            "blend_progress": 1.0,  # No blending needed for new planes
+                            "color": color
                         }
                     else:
                         f = flights[icao]
@@ -324,11 +334,13 @@ def main():
         screen.fill(BACKGROUND_COLOR)
 
         for icao, f in reversed(visible):
+            plane_color = f["color"]
+
             if len(f["trail"]) >= 2:
-                draw_trail(screen, f["trail"])
+                draw_trail(screen, f["trail"], plane_color)
 
             cx, cy = int(f["sx"]), int(f["sy"])
-            draw_plane(screen, cx, cy, f["heading"], PLANE_COLOR, PLANE_SIZE)
+            draw_plane(screen, cx, cy, f["heading"], plane_color, PLANE_SIZE)
 
             # Labels (offset below the plane)
             name = f["callsign"] or icao.upper()
