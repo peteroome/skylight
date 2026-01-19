@@ -39,7 +39,7 @@ TARGET_FPS = 60
 API_INTERVAL = 15
 BLEND_DURATION = 1.0  # Seconds to blend from predicted to actual position
 TRAIL_WIDTH = 15  # Chunky trails for projector visibility
-PLANE_SIZE = 14  # Size of plane icon
+PLANE_SIZE = 35  # Size of plane icon
 
 # Flight data
 flights = {}
