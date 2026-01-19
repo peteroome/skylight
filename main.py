@@ -110,37 +110,56 @@ def draw_plane(surface, x, y, heading, color, size):
     # Heading: 0=North, 90=East, 180=South, 270=West
     # Convert to radians, adjust so 0 points up
     angle = math.radians(heading)
-
-    # Plane shape points (pointing up when angle=0)
-    # Body, wings, tail - simple cartoon plane
     s = size
-    points = [
-        (0, -s * 1.5),      # Nose
-        (s * 0.4, -s * 0.3),  # Right front
-        (s * 1.5, s * 0.2),   # Right wing tip
-        (s * 0.4, s * 0.3),   # Right wing back
-        (s * 0.3, s * 1.0),   # Right tail
-        (s * 0.8, s * 1.5),   # Right tail tip
-        (0, s * 1.1),         # Tail center
-        (-s * 0.8, s * 1.5),  # Left tail tip
-        (-s * 0.3, s * 1.0),  # Left tail
-        (-s * 0.4, s * 0.3),  # Left wing back
-        (-s * 1.5, s * 0.2),  # Left wing tip
-        (-s * 0.4, -s * 0.3), # Left front
+
+    # Fuselage (pointed oval shape)
+    fuselage = [
+        (0, -s * 1.2),        # Nose
+        (s * 0.25, -s * 0.8), # Right nose curve
+        (s * 0.3, 0),         # Right mid
+        (s * 0.25, s * 0.9),  # Right rear
+        (0, s * 1.1),         # Tail
+        (-s * 0.25, s * 0.9), # Left rear
+        (-s * 0.3, 0),        # Left mid
+        (-s * 0.25, -s * 0.8),# Left nose curve
     ]
 
-    # Rotate and translate points
-    cos_a, sin_a = math.cos(angle), math.sin(angle)
-    rotated = []
-    for px, py in points:
-        rx = px * cos_a - py * sin_a + x
-        ry = px * sin_a + py * cos_a + y
-        rotated.append((rx, ry))
+    # Main wings (swept back)
+    wings = [
+        (s * 0.3, -s * 0.1),  # Right wing root front
+        (s * 1.4, s * 0.3),   # Right wing tip front
+        (s * 1.3, s * 0.5),   # Right wing tip back
+        (s * 0.3, s * 0.2),   # Right wing root back
+        (-s * 0.3, s * 0.2),  # Left wing root back
+        (-s * 1.3, s * 0.5),  # Left wing tip back
+        (-s * 1.4, s * 0.3),  # Left wing tip front
+        (-s * 0.3, -s * 0.1), # Left wing root front
+    ]
 
-    # Draw filled plane
-    pygame.draw.polygon(surface, color, rotated)
-    # Draw outline for definition
-    pygame.draw.polygon(surface, (min(color[0] + 40, 255), min(color[1] + 40, 255), min(color[2] + 40, 255)), rotated, 2)
+    # Tail wings (smaller, at back)
+    tail = [
+        (s * 0.2, s * 0.7),   # Right tail root
+        (s * 0.6, s * 1.0),   # Right tail tip
+        (s * 0.5, s * 1.1),   # Right tail back
+        (s * 0.2, s * 0.9),   # Right tail root back
+        (-s * 0.2, s * 0.9),  # Left tail root back
+        (-s * 0.5, s * 1.1),  # Left tail back
+        (-s * 0.6, s * 1.0),  # Left tail tip
+        (-s * 0.2, s * 0.7),  # Left tail root
+    ]
+
+    # Rotate and translate helper
+    cos_a, sin_a = math.cos(angle), math.sin(angle)
+    def rotate_points(points):
+        return [(px * cos_a - py * sin_a + x, px * sin_a + py * cos_a + y) for px, py in points]
+
+    # Draw all parts
+    highlight = (min(color[0] + 30, 255), min(color[1] + 30, 255), min(color[2] + 30, 255))
+
+    for shape in [wings, tail, fuselage]:  # Draw wings/tail first, fuselage on top
+        rotated = rotate_points(shape)
+        pygame.draw.polygon(surface, color, rotated)
+        pygame.draw.polygon(surface, highlight, rotated, 2)
 
 
 def create_initial_trail(lat, lon, alt, velocity, heading):
