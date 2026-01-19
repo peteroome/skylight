@@ -352,10 +352,10 @@ def main():
             cx, cy = int(f["sx"]), int(f["sy"])
             draw_plane(screen, cx, cy, f["heading"], plane_color, PLANE_SIZE)
 
-            # Labels (offset below the plane)
+            # Labels (offset below the plane, same color as plane)
             name = f["callsign"] or icao.upper()
-            label1 = font.render(name, True, TEXT_COLOR)
-            label2 = font.render(f"({f['country'] or 'Unknown'})", True, TEXT_COLOR)
+            label1 = font.render(name, True, plane_color)
+            label2 = font.render(f"({f['country'] or 'Unknown'})", True, plane_color)
             screen.blit(label1, (cx - label1.get_width() // 2, cy + PLANE_SIZE * 2))
             screen.blit(label2, (cx - label2.get_width() // 2, cy + PLANE_SIZE * 2 + 16))
 
