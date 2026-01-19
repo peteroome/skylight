@@ -42,8 +42,7 @@ TRAIL_LENGTH = 500
 MAX_PLANES = 8
 TARGET_FPS = 60
 API_INTERVAL = 15
-BLEND_DURATION = 1.0  # Seconds to blend from predicted to actual position
-SMOOTHING_FACTOR = 0.08  # Lower = smoother but more lag (0.05-0.15 range)
+SMOOTHING_FACTOR = 0.03  # Lower = smoother but more lag. Single smooth interpolation.
 TRAIL_WIDTH = 15  # Chunky trails for projector visibility
 PLANE_SIZE = 35  # Size of plane icon
 
@@ -258,39 +257,21 @@ def main():
                         sx, sy = lat_lon_to_screen(lat, lon)
                         flights[icao] = {
                             "trail": create_initial_trail(lat, lon, alt, velocity, heading),
-                            "lat": lat, "lon": lon, "alt": alt,
-                            "render_lat": lat, "render_lon": lon,  # Current rendered position
-                            "velocity": velocity, "heading": heading,
+                            "lat": lat, "lon": lon,  # For distance sorting
+                            "target_sx": sx, "target_sy": sy,  # Where API says plane is
+                            "smooth_sx": sx, "smooth_sy": sy,  # Smoothed display position
+                            "heading": heading,
                             "callsign": callsign, "country": country,
                             "last_seen": now,
-                            "blend_progress": 1.0,  # No blending needed for new planes
-                            "color": color,
-                            "smooth_sx": sx, "smooth_sy": sy  # Smoothed screen position
+                            "color": color
                         }
                     else:
                         f = flights[icao]
-                        # Check if new position is ahead of current position in heading direction
-                        # If behind, snap instead of blend to avoid sliding backwards
-                        heading_rad = math.radians(f["heading"])
-                        dx = lat - f["render_lat"]  # Delta in lat (roughly north)
-                        dy = lon - f["render_lon"]  # Delta in lon (roughly east)
-                        # Project onto heading direction (positive = ahead, negative = behind)
-                        forward = dx * math.cos(heading_rad) + dy * math.sin(heading_rad)
-
-                        if forward >= 0:
-                            # New position is ahead - blend smoothly
-                            f["blend_from_lat"] = f["render_lat"]
-                            f["blend_from_lon"] = f["render_lon"]
-                            f["blend_progress"] = 0.0
-                        else:
-                            # New position is behind - snap to avoid backwards sliding
-                            f["render_lat"] = lat
-                            f["render_lon"] = lon
-                            f["blend_progress"] = 1.0
-
-                        # Update target position
-                        f["lat"], f["lon"], f["alt"] = lat, lon, alt
-                        f["velocity"], f["heading"] = velocity, heading
+                        # Simply update target - smoothing handles the rest
+                        sx, sy = lat_lon_to_screen(lat, lon)
+                        f["lat"], f["lon"] = lat, lon
+                        f["target_sx"], f["target_sy"] = sx, sy
+                        f["heading"] = heading
                         f["callsign"], f["country"] = callsign, country
                         f["last_seen"] = now
 
@@ -300,36 +281,13 @@ def main():
         except queue.Empty:
             pass  # No new data, continue rendering
 
-        # Update positions
+        # Update positions - simple smooth interpolation toward target
         for f in flights.values():
-            # Extrapolate target position based on velocity
-            if f["velocity"] > 0:
-                cos_lat = math.cos(math.radians(f["lat"]))
-                heading_rad = math.radians(f["heading"])
-                f["lat"] += f["velocity"] * math.cos(heading_rad) / 111000 * dt
-                f["lon"] += f["velocity"] * math.sin(heading_rad) / (111000 * cos_lat) * dt
-
-            # Handle position blending
-            if f["blend_progress"] < 1.0:
-                f["blend_progress"] += dt / BLEND_DURATION
-                t = min(f["blend_progress"], 1.0)
-                # Smooth easing (ease-out)
-                t = 1 - (1 - t) ** 2
-                f["render_lat"] = f["blend_from_lat"] + (f["lat"] - f["blend_from_lat"]) * t
-                f["render_lon"] = f["blend_from_lon"] + (f["lon"] - f["blend_from_lon"]) * t
-            else:
-                f["render_lat"] = f["lat"]
-                f["render_lon"] = f["lon"]
-
-            # Calculate target screen position
-            target_sx, target_sy = lat_lon_to_screen(f["render_lat"], f["render_lon"])
-
-            # Smooth the screen position (low-pass filter)
-            f["smooth_sx"] += (target_sx - f["smooth_sx"]) * SMOOTHING_FACTOR
-            f["smooth_sy"] += (target_sy - f["smooth_sy"]) * SMOOTHING_FACTOR
+            # Smoothly move toward target position
+            f["smooth_sx"] += (f["target_sx"] - f["smooth_sx"]) * SMOOTHING_FACTOR
+            f["smooth_sy"] += (f["target_sy"] - f["smooth_sy"]) * SMOOTHING_FACTOR
 
             sx, sy = f["smooth_sx"], f["smooth_sy"]
-            f["sx"], f["sy"] = sx, sy
 
             # Add to trail if moved enough (deque auto-limits size)
             trail = f["trail"]
@@ -349,7 +307,7 @@ def main():
             if len(f["trail"]) >= 2:
                 draw_trail(screen, f["trail"], plane_color)
 
-            cx, cy = int(f["sx"]), int(f["sy"])
+            cx, cy = int(f["smooth_sx"]), int(f["smooth_sy"])
             draw_plane(screen, cx, cy, f["heading"], plane_color, PLANE_SIZE)
 
             # Labels (offset below the plane, same color as plane)
