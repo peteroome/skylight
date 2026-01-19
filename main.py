@@ -5,6 +5,9 @@ import os
 import math
 import requests
 import platform
+import threading
+import queue
+from collections import deque
 
 # Configuration
 BACKGROUND_COLOR = (0, 0, 0)
@@ -32,12 +35,14 @@ TEXT_COLOR = (70, 100, 160)
 MAX_ALTITUDE = 12000
 TRAIL_LENGTH = 500
 MAX_PLANES = 8
-TARGET_FPS = 30
+TARGET_FPS = 60
 API_INTERVAL = 15
+BLEND_DURATION = 1.0  # Seconds to blend from predicted to actual position
+TRAIL_WIDTH = 6  # Chunky trails for projector visibility
 
 # Flight data
 flights = {}
-last_api_call = 0
+flight_queue = queue.Queue()  # Thread-safe queue for API results
 
 # Screen dimensions (set at runtime)
 screen_width = 800
@@ -60,6 +65,16 @@ def fetch_flights():
     return []
 
 
+def api_worker():
+    """Background thread that fetches flight data periodically"""
+    import time
+    while True:
+        states = fetch_flights()
+        if states:
+            flight_queue.put(states)
+        time.sleep(API_INTERVAL)
+
+
 def lat_lon_to_screen(lat, lon):
     """Convert lat/lon to screen coordinates"""
     x = (lon - MIN_LON) / LON_RANGE * screen_width
@@ -75,30 +90,32 @@ def distance_from_home(lat, lon):
 
 
 def draw_trail(surface, trail):
-    """Draw anti-aliased trail that fades from dim to bright"""
+    """Draw thick trail that fades from dim to bright"""
     n = len(trail)
     if n < 2:
         return
 
+    # Convert deque to list for indexing
+    trail_list = list(trail)
     r, g, b = TRAIL_COLOR
     for i in range(n - 1):
         fade = 0.2 + 0.8 * i / n
         color = (int(r * fade), int(g * fade), int(b * fade))
-        pygame.draw.aaline(surface, color, trail[i], trail[i + 1])
+        pygame.draw.line(surface, color, trail_list[i], trail_list[i + 1], TRAIL_WIDTH)
 
 
 def create_initial_trail(lat, lon, alt, velocity, heading):
     """Project trail backwards based on velocity/heading"""
+    trail = deque(maxlen=TRAIL_LENGTH)
     if velocity <= 0:
-        return []
+        return trail
 
     cos_lat = math.cos(math.radians(lat))
     heading_rad = math.radians(heading)
     lat_speed = velocity * math.cos(heading_rad) / 111000
     lon_speed = velocity * math.sin(heading_rad) / (111000 * cos_lat)
 
-    # Build trail from oldest to newest (avoids slow insert(0))
-    trail = []
+    # Build trail from oldest to newest
     for i in range(TRAIL_LENGTH, 0, -1):
         t = i * 180 / TRAIL_LENGTH  # 0 to 180 seconds back
         trail.append(lat_lon_to_screen(lat - lat_speed * t, lon - lon_speed * t))
@@ -106,7 +123,7 @@ def create_initial_trail(lat, lon, alt, velocity, heading):
 
 
 def main():
-    global flights, last_api_call, screen_width, screen_height
+    global flights, screen_width, screen_height
 
     pygame.init()
     on_pi = platform.machine().startswith('arm')
@@ -117,6 +134,10 @@ def main():
     else:
         screen_width, screen_height = 800, 450
         screen = pygame.display.set_mode((screen_width, screen_height))
+
+    # Start background API thread
+    api_thread = threading.Thread(target=api_worker, daemon=True)
+    api_thread.start()
 
     # Auto-reload on file save (dev only)
     script_path = os.path.abspath(__file__) if not on_pi else None
@@ -150,57 +171,77 @@ def main():
             if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                 running = False
 
-        # Fetch flight data periodically
-        if now / 1000 - last_api_call > API_INTERVAL:
-            last_api_call = now / 1000
+        # Process flight data from background thread (non-blocking)
+        try:
+            while True:
+                states = flight_queue.get_nowait()
+                for state in states:
+                    if state[5] is None or state[6] is None:
+                        continue
 
-            for state in fetch_flights():
-                if state[5] is None or state[6] is None:
-                    continue
+                    icao, callsign, country = state[0], (state[1] or "").strip(), state[2] or ""
+                    lon, lat, alt = state[5], state[6], state[7] or 0
+                    velocity, heading = state[9] or 0, state[10] or 0
 
-                icao, callsign, country = state[0], (state[1] or "").strip(), state[2] or ""
-                lon, lat, alt = state[5], state[6], state[7] or 0
-                velocity, heading = state[9] or 0, state[10] or 0
+                    if alt > MAX_ALTITUDE:
+                        continue
 
-                if alt > MAX_ALTITUDE:
-                    continue
+                    if icao not in flights:
+                        flights[icao] = {
+                            "trail": create_initial_trail(lat, lon, alt, velocity, heading),
+                            "lat": lat, "lon": lon, "alt": alt,
+                            "render_lat": lat, "render_lon": lon,  # Current rendered position
+                            "velocity": velocity, "heading": heading,
+                            "callsign": callsign, "country": country,
+                            "last_seen": now,
+                            "blend_progress": 1.0  # No blending needed for new planes
+                        }
+                    else:
+                        f = flights[icao]
+                        # Start blending from current rendered position to new actual position
+                        f["blend_from_lat"] = f["render_lat"]
+                        f["blend_from_lon"] = f["render_lon"]
+                        f["blend_progress"] = 0.0
+                        # Update target position
+                        f["lat"], f["lon"], f["alt"] = lat, lon, alt
+                        f["velocity"], f["heading"] = velocity, heading
+                        f["callsign"], f["country"] = callsign, country
+                        f["last_seen"] = now
 
-                if icao not in flights:
-                    flights[icao] = {
-                        "trail": create_initial_trail(lat, lon, alt, velocity, heading),
-                        "lat": lat, "lon": lon, "alt": alt,
-                        "velocity": velocity, "heading": heading,
-                        "callsign": callsign, "country": country,
-                        "last_seen": now
-                    }
-                else:
-                    f = flights[icao]
-                    f["lat"], f["lon"], f["alt"] = lat, lon, alt
-                    f["velocity"], f["heading"] = velocity, heading
-                    f["callsign"], f["country"] = callsign, country
-                    f["last_seen"] = now
-
-            # Remove stale flights
-            flights = {k: v for k, v in flights.items() if now - v["last_seen"] < 60000}
-            print(f"Tracking {len(flights)} flights")
+                # Remove stale flights
+                flights = {k: v for k, v in flights.items() if now - v["last_seen"] < 60000}
+                print(f"Tracking {len(flights)} flights")
+        except queue.Empty:
+            pass  # No new data, continue rendering
 
         # Update positions
         for f in flights.values():
+            # Extrapolate target position based on velocity
             if f["velocity"] > 0:
                 cos_lat = math.cos(math.radians(f["lat"]))
                 heading_rad = math.radians(f["heading"])
                 f["lat"] += f["velocity"] * math.cos(heading_rad) / 111000 * dt
                 f["lon"] += f["velocity"] * math.sin(heading_rad) / (111000 * cos_lat) * dt
 
-            sx, sy = lat_lon_to_screen(f["lat"], f["lon"])
+            # Handle position blending
+            if f["blend_progress"] < 1.0:
+                f["blend_progress"] += dt / BLEND_DURATION
+                t = min(f["blend_progress"], 1.0)
+                # Smooth easing (ease-out)
+                t = 1 - (1 - t) ** 2
+                f["render_lat"] = f["blend_from_lat"] + (f["lat"] - f["blend_from_lat"]) * t
+                f["render_lon"] = f["blend_from_lon"] + (f["lon"] - f["blend_from_lon"]) * t
+            else:
+                f["render_lat"] = f["lat"]
+                f["render_lon"] = f["lon"]
+
+            sx, sy = lat_lon_to_screen(f["render_lat"], f["render_lon"])
             f["sx"], f["sy"] = sx, sy
 
-            # Add to trail if moved enough
+            # Add to trail if moved enough (deque auto-limits size)
             trail = f["trail"]
             if not trail or (sx - trail[-1][0])**2 + (sy - trail[-1][1])**2 >= 1:
                 trail.append((sx, sy))
-                if len(trail) > TRAIL_LENGTH:
-                    f["trail"] = trail[-TRAIL_LENGTH:]
 
         # Sort by distance, take closest
         sorted_flights = sorted(flights.items(), key=lambda x: distance_from_home(x[1]["lat"], x[1]["lon"]))
