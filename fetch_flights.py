@@ -12,6 +12,73 @@ import requests
 
 import config
 
+# ICAO hex prefix to country mapping (first 1-2 chars of hex code)
+# See: https://en.wikipedia.org/wiki/List_of_aircraft_registration_prefixes
+ICAO_COUNTRY = {
+    "0": "Unknown",
+    "4": "Europe",
+    "40": "United Kingdom", "41": "United Kingdom", "42": "United Kingdom", "43": "United Kingdom",
+    "44": "United Kingdom", "45": "United Kingdom", "46": "United Kingdom", "47": "United Kingdom",
+    "48": "Gibraltar",
+    "49": "Denmark",
+    "4A": "Denmark", "4B": "Denmark",
+    "4C": "Ireland",
+    "50": "Czech Republic", "51": "Czech Republic",
+    "52": "Slovakia",
+    "54": "Belgium", "55": "Belgium",
+    "56": "France", "57": "France", "58": "France", "59": "France", "5A": "France", "5B": "France",
+    "5C": "France", "5D": "France", "5E": "France", "5F": "France",
+    "60": "Germany", "61": "Germany", "62": "Germany", "63": "Germany", "64": "Germany", "65": "Germany",
+    "66": "Germany", "67": "Germany", "68": "Germany", "69": "Germany", "6A": "Germany", "6B": "Germany",
+    "70": "Hungary", "71": "Hungary",
+    "72": "Italy", "73": "Italy", "74": "Italy", "75": "Italy", "76": "Italy", "77": "Italy",
+    "78": "Monaco",
+    "79": "Malta",
+    "7C": "Australia", "7D": "Australia", "7E": "Australia", "7F": "Australia",
+    "80": "India", "81": "India", "82": "India", "83": "India", "84": "India", "85": "India",
+    "86": "Japan", "87": "Japan", "88": "Japan",
+    "89": "South Korea", "8A": "South Korea",
+    "8B": "Indonesia", "8C": "Indonesia",
+    "8D": "Malaysia",
+    "9C": "Saudi Arabia", "9D": "Saudi Arabia", "9E": "Saudi Arabia",
+    "A": "United States", "A0": "United States", "A1": "United States", "A2": "United States",
+    "A3": "United States", "A4": "United States", "A5": "United States", "A6": "United States",
+    "A7": "United States", "A8": "United States", "A9": "United States", "AA": "United States",
+    "AB": "United States", "AC": "United States", "AD": "United States", "AE": "United States",
+    "AF": "United States",
+    "C": "Canada", "C0": "Canada", "C1": "Canada", "C2": "Canada", "C3": "Canada",
+    "E0": "Mexico", "E1": "Mexico", "E2": "Mexico", "E3": "Mexico",
+    "E4": "Brazil", "E5": "Brazil", "E6": "Brazil", "E7": "Brazil", "E8": "Brazil", "E9": "Brazil",
+    "EA": "Brazil", "EB": "Brazil", "EC": "Brazil", "ED": "Brazil", "EE": "Brazil", "EF": "Brazil",
+    "F0": "Argentina", "F1": "Argentina", "F2": "Argentina", "F3": "Argentina",
+    "34": "Spain", "35": "Spain", "36": "Spain", "37": "Spain", "38": "Spain",
+    "39": "Portugal", "3A": "Portugal",
+    "3C": "Netherlands", "3D": "Netherlands",
+    "4D": "Finland",
+    "4E": "Luxembourg",
+    "01": "Russia", "02": "Russia", "03": "Russia", "04": "Russia", "05": "Russia",
+    "06": "Russia", "07": "Russia", "08": "Russia", "09": "Russia", "0A": "Russia",
+    "0B": "Russia", "0C": "Russia", "0D": "Russia", "0E": "Russia", "0F": "Russia",
+    "10": "China", "11": "China", "12": "China", "13": "China", "14": "China",
+    "15": "China", "16": "China", "17": "China",
+    "C8": "New Zealand", "C9": "New Zealand", "CA": "New Zealand",
+    "76": "South Africa", "77": "South Africa",
+    "89": "United Arab Emirates",
+    "06": "Qatar",
+    "07": "Singapore",
+    "76": "Turkey", "77": "Turkey", "78": "Turkey",
+}
+
+def get_country_from_icao(icao: str) -> str:
+    """Look up country from ICAO hex code prefix."""
+    icao = icao.upper()
+    # Try 2-char prefix first, then 1-char
+    if icao[:2] in ICAO_COUNTRY:
+        return ICAO_COUNTRY[icao[:2]]
+    if icao[:1] in ICAO_COUNTRY:
+        return ICAO_COUNTRY[icao[:1]]
+    return "Unknown"
+
 # In-memory flight state
 flights: dict = {}
 color_index = 0
@@ -118,10 +185,13 @@ def process_states(states: list, now: datetime) -> None:
             color = config.PLANE_COLORS[color_index % len(config.PLANE_COLORS)]
             color_index = (color_index + 1) % len(config.PLANE_COLORS)
 
+            # Look up country from ICAO registration prefix
+            country = get_country_from_icao(icao)
+
             flights[icao] = {
                 "id": icao,
                 "callsign": callsign,
-                "country": aircraft_type,  # Use aircraft type instead of country
+                "country": country,
                 "lat": lat,
                 "lon": lon,
                 "altitude_m": altitude,
@@ -136,8 +206,7 @@ def process_states(states: list, now: datetime) -> None:
             # Update existing flight
             f = flights[icao]
             f["callsign"] = callsign
-            if aircraft_type:
-                f["country"] = aircraft_type
+            # Country is set at creation from ICAO prefix, don't update
             f["lat"] = lat
             f["lon"] = lon
             f["altitude_m"] = altitude
@@ -155,7 +224,7 @@ def process_states(states: list, now: datetime) -> None:
 
 
 def prune_stale_flights(now: datetime) -> None:
-    """Remove flights not seen within timeout, extrapolate others."""
+    """Remove flights not seen within timeout."""
     to_remove = []
 
     for icao, f in flights.items():
@@ -164,16 +233,9 @@ def prune_stale_flights(now: datetime) -> None:
         if age_seconds > config.PLANE_TIMEOUT_S:
             to_remove.append(icao)
         elif age_seconds > config.API_INTERVAL_S:
-            # Flight missing from latest update - extrapolate
+            # Flight missing from latest update - mark as extrapolated
+            # but don't modify position (browser handles extrapolation)
             f["extrapolated"] = True
-            new_lat, new_lon = extrapolate_position(f, config.API_INTERVAL_S)
-            f["lat"] = new_lat
-            f["lon"] = new_lon
-            f["trail"].append({
-                "lat": new_lat,
-                "lon": new_lon,
-                "time": now.isoformat(),
-            })
 
     for icao in to_remove:
         del flights[icao]

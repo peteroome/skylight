@@ -8,10 +8,16 @@ echo "Setting up Skylight on Raspberry Pi..."
 # Install dependencies
 echo "Installing dependencies..."
 sudo apt update
-sudo apt install -y python3 python3-pip chromium-browser
+sudo apt install -y python3 python3-requests surf unclutter xdotool
 
-# Install Python packages
-pip3 install requests
+# Increase GPU memory for better graphics performance
+if ! grep -q "gpu_mem=128" /boot/firmware/config.txt 2>/dev/null; then
+  echo "gpu_mem=128" | sudo tee -a /boot/firmware/config.txt
+fi
+
+# Hide mouse cursor automatically
+mkdir -p ~/.config/lxsession/LXDE-pi
+echo "@unclutter -idle 0" >> ~/.config/lxsession/LXDE-pi/autostart 2>/dev/null || true
 
 # Create web server service
 echo "Creating HTTP server service..."

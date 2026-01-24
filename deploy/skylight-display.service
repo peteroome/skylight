@@ -1,15 +1,16 @@
 # deploy/skylight-display.service
 [Unit]
 Description=Skylight kiosk display
-After=skylight-data.service
-Wants=skylight-data.service
+After=skylight-data.service skylight-http.service
+Wants=skylight-data.service skylight-http.service
 
 [Service]
 Type=simple
 User=pi
 Environment=DISPLAY=:0
+Environment=WEBKIT_DISABLE_COMPOSITING_MODE=1
 ExecStartPre=/bin/sleep 3
-ExecStart=/usr/bin/chromium-browser --kiosk --noerrdialogs --disable-infobars --disable-session-crashed-bubble --incognito --disable-translate http://localhost:8000
+ExecStart=/usr/bin/surf -F http://localhost:8000
 Restart=always
 RestartSec=5
 

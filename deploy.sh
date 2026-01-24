@@ -18,8 +18,11 @@ rsync -avz --delete \
   --exclude '.DS_Store' \
   ./ "${PI_USER}@${PI_HOST}:${PI_PATH}/"
 
+echo "Copying service file..."
+ssh "${PI_USER}@${PI_HOST}" "sudo cp ${PI_PATH}/deploy/skylight-display.service /etc/systemd/system/ && sudo systemctl daemon-reload"
+
 echo "Restarting services..."
-ssh "${PI_USER}@${PI_HOST}" "sudo systemctl restart skylight-data skylight-http && sleep 2 && sudo systemctl restart skylight-display"
+ssh "${PI_USER}@${PI_HOST}" "sudo systemctl restart skylight-data skylight-http skylight-display"
 
 echo ""
 echo "Deployed!"

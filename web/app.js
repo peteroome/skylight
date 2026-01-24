@@ -1,9 +1,13 @@
-// web/app.js
+// web/app.js - Smooth trajectory-based plane animation
+
+// ─── Performance Configuration ────────────────────
+// Set to false to disable trails for better performance on low-end devices
+const ENABLE_TRAILS = true;
+const ENABLE_CURVES = true; // Set to false for straight paths only
 
 // ─── State ────────────────────────────────────────
 let config = null;
 let planes = new Map(); // id -> plane state
-let lastUpdate = null;
 let isConnected = false;
 
 // ─── DOM Elements ─────────────────────────────────
@@ -23,11 +27,8 @@ async function loadConfig() {
     return true;
   } catch (e) {
     console.error('Failed to load config:', e);
-    // Use defaults
     config = {
       pollIntervalMs: 1500,
-      smoothingFactor: 0.08,
-      trailFadeSteps: 50,
       home: { lat: 51.4229712, lon: -0.0541772 },
       bounds: {
         minLat: 51.1729712,
@@ -46,6 +47,187 @@ function latLonToScreen(lat, lon) {
   const x = ((lon - minLon) / (maxLon - minLon)) * window.innerWidth;
   const y = (1 - (lat - minLat) / (maxLat - minLat)) * window.innerHeight;
   return { x, y };
+}
+
+function screenToLatLon(x, y) {
+  const { minLat, maxLat, minLon, maxLon } = config.bounds;
+  const lon = (x / window.innerWidth) * (maxLon - minLon) + minLon;
+  const lat = (1 - y / window.innerHeight) * (maxLat - minLat) + minLat;
+  return { lat, lon };
+}
+
+// ─── Calculate Exit Point ─────────────────────────
+// Project from current position along heading until we hit a screen edge
+function calculateExitPoint(startLat, startLon, headingDeg) {
+  const { minLat, maxLat, minLon, maxLon } = config.bounds;
+
+  // Convert heading to radians (0° = North, 90° = East)
+  const headingRad = (headingDeg * Math.PI) / 180;
+
+  // Direction vector (in lat/lon space)
+  const dLat = Math.cos(headingRad);
+  const dLon = Math.sin(headingRad);
+
+  // Find intersection with each edge
+  let minT = Infinity;
+
+  // Top edge (maxLat)
+  if (dLat > 0) {
+    const t = (maxLat - startLat) / dLat;
+    if (t > 0 && t < minT) minT = t;
+  }
+  // Bottom edge (minLat)
+  if (dLat < 0) {
+    const t = (minLat - startLat) / dLat;
+    if (t > 0 && t < minT) minT = t;
+  }
+  // Right edge (maxLon)
+  if (dLon > 0) {
+    const t = (maxLon - startLon) / dLon;
+    if (t > 0 && t < minT) minT = t;
+  }
+  // Left edge (minLon)
+  if (dLon < 0) {
+    const t = (minLon - startLon) / dLon;
+    if (t > 0 && t < minT) minT = t;
+  }
+
+  // Calculate exit point
+  const exitLat = startLat + dLat * minT;
+  const exitLon = startLon + dLon * minT;
+
+  // Calculate distance in meters (approximate)
+  const distanceDeg = Math.sqrt(
+    Math.pow(exitLat - startLat, 2) +
+    Math.pow((exitLon - startLon) * Math.cos(startLat * Math.PI / 180), 2)
+  );
+  const distanceMeters = distanceDeg * 111000;
+
+  return { lat: exitLat, lon: exitLon, distanceMeters };
+}
+
+// ─── Easing Function ──────────────────────────────
+// Smooth ease-in-out for natural movement
+function easeInOutSine(t) {
+  return -(Math.cos(Math.PI * t) - 1) / 2;
+}
+
+// Linear for constant speed (planes don't accelerate mid-flight)
+function linear(t) {
+  return t;
+}
+
+// ─── Bezier Curve Interpolation ───────────────────
+// Quadratic bezier: P = (1-t)²P0 + 2(1-t)tP1 + t²P2
+function quadraticBezier(t, p0, p1, p2) {
+  const mt = 1 - t;
+  return mt * mt * p0 + 2 * mt * t * p1 + t * t * p2;
+}
+
+// Generate a control point for curved path
+// Returns null for straight paths, or {lat, lon} for curved
+function generateCurveControl(startLat, startLon, endLat, endLon, heading) {
+  // Skip curves if disabled for performance
+  if (!ENABLE_CURVES) return null;
+
+  // 60% of planes get curves
+  if (Math.random() > 0.6) return null;
+
+  // Calculate midpoint
+  const midLat = (startLat + endLat) / 2;
+  const midLon = (startLon + endLon) / 2;
+
+  // Calculate perpendicular direction (90° from heading)
+  const perpRad = ((heading + 90) * Math.PI) / 180;
+
+  // Random offset magnitude (as fraction of journey distance)
+  // Positive or negative for left/right curves
+  const journeyDist = Math.sqrt(
+    Math.pow(endLat - startLat, 2) +
+    Math.pow(endLon - startLon, 2)
+  );
+  const offsetMagnitude = journeyDist * (0.1 + Math.random() * 0.15); // 10-25% of journey
+  const offsetSign = Math.random() > 0.5 ? 1 : -1;
+
+  // Apply offset perpendicular to flight path
+  const controlLat = midLat + Math.cos(perpRad) * offsetMagnitude * offsetSign;
+  const controlLon = midLon + Math.sin(perpRad) * offsetMagnitude * offsetSign;
+
+  return { lat: controlLat, lon: controlLon };
+}
+
+// ─── Hex to RGB Helper ────────────────────────────
+function hexToRgb(hex) {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? {
+    r: parseInt(result[1], 16),
+    g: parseInt(result[2], 16),
+    b: parseInt(result[3], 16),
+  } : { r: 255, g: 255, b: 255 };
+}
+
+// ─── Draw Trails ──────────────────────────────────
+function drawTrails() {
+  // Clear canvas
+  trailsCtx.clearRect(0, 0, trailsCanvas.width, trailsCanvas.height);
+
+  for (const state of planes.values()) {
+    if (!state.screenPos) continue;
+
+    const rgb = hexToRgb(state.color);
+    const progress = state.progress || 0;
+
+    // Trail starts fading from the back after 60% progress
+    // fadeProgress: 0 at 60%, 1 at 100%
+    const fadeProgress = progress > 0.6 ? (progress - 0.6) / 0.4 : 0;
+
+    // Calculate where the visible trail starts (fades from the back)
+    const trailStartProgress = fadeProgress * progress;
+
+    // Get trail start and end positions
+    let trailStartLat, trailStartLon;
+    if (state.curveControl) {
+      trailStartLat = quadraticBezier(trailStartProgress, state.startLat, state.curveControl.lat, state.endLat);
+      trailStartLon = quadraticBezier(trailStartProgress, state.startLon, state.curveControl.lon, state.endLon);
+    } else {
+      trailStartLat = state.startLat + (state.endLat - state.startLat) * trailStartProgress;
+      trailStartLon = state.startLon + (state.endLon - state.startLon) * trailStartProgress;
+    }
+    const trailStart = latLonToScreen(trailStartLat, trailStartLon);
+
+    // Draw smooth bezier curve or straight line
+    trailsCtx.beginPath();
+    trailsCtx.moveTo(trailStart.x, trailStart.y);
+
+    if (state.curveControl) {
+      // For bezier, use minimal segments for Pi Zero performance
+      const segments = 4;
+      for (let i = 1; i <= segments; i++) {
+        const t = trailStartProgress + (progress - trailStartProgress) * (i / segments);
+        const lat = quadraticBezier(t, state.startLat, state.curveControl.lat, state.endLat);
+        const lon = quadraticBezier(t, state.startLon, state.curveControl.lon, state.endLon);
+        const pos = latLonToScreen(lat, lon);
+        trailsCtx.lineTo(pos.x, pos.y);
+      }
+    } else {
+      // Straight line
+      trailsCtx.lineTo(state.screenPos.x, state.screenPos.y);
+    }
+
+    // Create gradient from trail start (faded) to plane (more visible but still subtle)
+    const gradient = trailsCtx.createLinearGradient(
+      trailStart.x, trailStart.y,
+      state.screenPos.x, state.screenPos.y
+    );
+    gradient.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0)`);
+    gradient.addColorStop(0.3, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.15)`);
+    gradient.addColorStop(1, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.4)`);
+
+    trailsCtx.strokeStyle = gradient;
+    trailsCtx.lineWidth = 4;
+    trailsCtx.lineCap = 'butt'; // Faster than 'round'
+    trailsCtx.stroke();
+  }
 }
 
 // ─── Overlay Control ──────────────────────────────
@@ -77,13 +259,11 @@ function createPlaneElement(id, color) {
   el.id = `plane-${id}`;
   el.style.setProperty('--plane-color', color);
 
-  // Icon container
   const icon = document.createElement('div');
   icon.className = 'plane-icon';
   icon.innerHTML = PLANE_SVG;
   el.appendChild(icon);
 
-  // Label
   const label = document.createElement('div');
   label.className = 'plane-label';
   el.appendChild(label);
@@ -92,135 +272,81 @@ function createPlaneElement(id, color) {
   return el;
 }
 
-// ─── Hex to RGB Helper ────────────────────────────
-const HEX_REGEX = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i;
-const colorCache = new Map();
-
-function hexToRgb(hex) {
-  if (colorCache.has(hex)) return colorCache.get(hex);
-  const result = HEX_REGEX.exec(hex);
-  const rgb = result ? {
-    r: parseInt(result[1], 16),
-    g: parseInt(result[2], 16),
-    b: parseInt(result[3], 16),
-  } : null;
-  if (rgb) colorCache.set(hex, rgb);
-  return rgb;
-}
-
-// ─── Draw All Trails ──────────────────────────────
-function drawAllTrails() {
-  // Clear canvas
-  trailsCtx.clearRect(0, 0, trailsCanvas.width, trailsCanvas.height);
-
-  // Draw each plane's trail
-  for (const state of planes.values()) {
-    const trail = state.trail;
-    if (!trail || trail.length < 2) continue;
-
-    const rgb = hexToRgb(state.color);
-    if (!rgb) continue;
-
-    // Draw trail segments with fading opacity
-    for (let i = 0; i < trail.length - 1; i++) {
-      const p1 = trail[i];
-      const p2 = trail[i + 1];
-
-      // Fade based on position in trail (older = dimmer)
-      const progress = i / (trail.length - 1);
-      const alpha = 0.1 + progress * 0.6;
-
-      trailsCtx.beginPath();
-      trailsCtx.moveTo(p1.x, p1.y);
-      trailsCtx.lineTo(p2.x, p2.y);
-      trailsCtx.strokeStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
-      trailsCtx.lineWidth = 2 + progress * 6; // Thicker toward plane
-      trailsCtx.lineCap = 'round';
-      trailsCtx.stroke();
-    }
-  }
-}
-
 // ─── Update Plane Element ─────────────────────────
 function updatePlaneElement(el, state) {
   const { x, y } = state.screenPos;
-  const heading = state.heading;
 
-  // Position the plane (center it on the icon)
-  el.style.transform = `translate(${x - 14}px, ${y - 14}px)`;
+  el.style.transform = `translate(${x - 24}px, ${y - 24}px)`;
 
-  // Rotate icon to match heading
   const icon = el.querySelector('.plane-icon');
-  icon.style.transform = `rotate(${heading}deg)`;
+  icon.style.transform = `rotate(${state.heading}deg)`;
 
-  // Update label
   const label = el.querySelector('.plane-label');
-  const displayName = state.callsign || state.id.toUpperCase();
-  label.textContent = `${displayName} · ${state.country}`;
+  const displayName = state.callsign || state.id.slice(-6).toUpperCase();
+  label.textContent = `${displayName} - ${state.country}`;
 }
 
 // ─── Remove Plane Element ─────────────────────────
 function removePlaneElement(id) {
   const el = document.getElementById(`plane-${id}`);
-  if (el) {
-    el.remove();
-  }
-}
-
-// ─── Velocity Extrapolation ───────────────────────
-function extrapolatePosition(state, dtSeconds) {
-  if (state.velocity <= 0) return;
-
-  const headingRad = (state.heading * Math.PI) / 180;
-  const cosLat = Math.max(0.0001, Math.cos((state.lat * Math.PI) / 180));
-
-  // Convert m/s to degrees/s
-  const latSpeed = (state.velocity * Math.cos(headingRad)) / 111000;
-  const lonSpeed = (state.velocity * Math.sin(headingRad)) / (111000 * cosLat);
-
-  state.lat += latSpeed * dtSeconds;
-  state.lon += lonSpeed * dtSeconds;
+  if (el) el.remove();
 }
 
 // ─── Animation Loop ───────────────────────────────
-let lastFrameTime = 0;
+let lastAnimateTime = 0;
+const TARGET_FPS = 15; // Limit to 15fps for Pi Zero performance
+const FRAME_INTERVAL = 1000 / TARGET_FPS;
 
 function animate(currentTime) {
-  if (!lastFrameTime) lastFrameTime = currentTime;
-  const dtSeconds = (currentTime - lastFrameTime) / 1000;
-  lastFrameTime = currentTime;
+  // Throttle frame rate for Pi performance
+  const elapsed = currentTime - lastAnimateTime;
+  if (elapsed < FRAME_INTERVAL) {
+    requestAnimationFrame(animate);
+    return;
+  }
+  lastAnimateTime = currentTime - (elapsed % FRAME_INTERVAL);
 
-  // Cap dt to prevent huge jumps after tab switching
-  const cappedDt = Math.min(dtSeconds, 0.1);
+  const toRemove = [];
 
-  // Update each plane
   for (const [id, state] of planes) {
-    // Extrapolate position based on velocity
-    extrapolatePosition(state, cappedDt);
+    // Calculate progress (0 to 1)
+    const elapsed = currentTime - state.startTime;
+    const progress = Math.min(elapsed / state.duration, 1);
+    state.progress = progress; // Store for trail drawing
 
-    // Convert to screen coordinates
-    const targetPos = latLonToScreen(state.lat, state.lon);
+    // Apply easing
+    const easedProgress = linear(progress);
 
-    // Smooth interpolation toward target
-    if (!state.screenPos) {
-      state.screenPos = targetPos;
+    // Interpolate position (curved or straight)
+    if (state.curveControl) {
+      // Quadratic bezier curve
+      state.lat = quadraticBezier(easedProgress, state.startLat, state.curveControl.lat, state.endLat);
+      state.lon = quadraticBezier(easedProgress, state.startLon, state.curveControl.lon, state.endLon);
+
+      // Calculate tangent direction for heading (derivative of bezier)
+      const dt = 0.01;
+      const nextT = Math.min(easedProgress + dt, 1);
+      const nextLat = quadraticBezier(nextT, state.startLat, state.curveControl.lat, state.endLat);
+      const nextLon = quadraticBezier(nextT, state.startLon, state.curveControl.lon, state.endLon);
+      state.heading = Math.atan2(nextLon - state.lon, nextLat - state.lat) * 180 / Math.PI;
     } else {
-      const factor = config.smoothingFactor;
-      state.screenPos.x += (targetPos.x - state.screenPos.x) * factor;
-      state.screenPos.y += (targetPos.y - state.screenPos.y) * factor;
+      // Straight line
+      state.lat = state.startLat + (state.endLat - state.startLat) * easedProgress;
+      state.lon = state.startLon + (state.endLon - state.startLon) * easedProgress;
+    }
+    state.screenPos = latLonToScreen(state.lat, state.lon);
+
+    // Store trail points for curved paths (sample every ~2% progress)
+    if (state.trailPoints.length === 0 || progress - state.lastTrailProgress > 0.02) {
+      state.trailPoints.push({ x: state.screenPos.x, y: state.screenPos.y });
+      state.lastTrailProgress = progress;
+      // Keep trail reasonable length
+      if (state.trailPoints.length > 50) state.trailPoints.shift();
     }
 
-    // Add to trail (screen coordinates)
-    if (!state.trail) state.trail = [];
-    const lastTrailPoint = state.trail[state.trail.length - 1];
-    if (!lastTrailPoint ||
-        Math.abs(state.screenPos.x - lastTrailPoint.x) > 1 ||
-        Math.abs(state.screenPos.y - lastTrailPoint.y) > 1) {
-      state.trail.push({ x: state.screenPos.x, y: state.screenPos.y });
-      // Limit trail length
-      if (state.trail.length > 500) {
-        state.trail.shift();
-      }
+    // Ensure start screen position is set (for trails)
+    if (!state.startScreenPos) {
+      state.startScreenPos = latLonToScreen(state.startLat, state.startLon);
     }
 
     // Update DOM
@@ -229,10 +355,24 @@ function animate(currentTime) {
       el = createPlaneElement(id, state.color);
     }
     updatePlaneElement(el, state);
+
+    // Mark for removal if journey complete
+    if (progress >= 1) {
+      toRemove.push(id);
+    }
   }
 
-  // Draw all trails on global canvas
-  drawAllTrails();
+  // Remove completed planes
+  for (const id of toRemove) {
+    removePlaneElement(id);
+    planes.delete(id);
+  }
+
+  // Update count
+  updateCount(planes.size);
+
+  // Draw trails (if enabled)
+  if (ENABLE_TRAILS) drawTrails();
 
   requestAnimationFrame(animate);
 }
@@ -244,7 +384,6 @@ async function fetchFlightData() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
     const data = await response.json();
-    lastUpdate = new Date(data.updated);
 
     if (data.status === 'error') {
       if (isConnected) {
@@ -254,66 +393,74 @@ async function fetchFlightData() {
       return;
     }
 
-    // Hide overlay on successful data
     if (!isConnected) {
       hideOverlay();
       isConnected = true;
     }
 
-    // Track which planes are in the new data
-    const newPlaneIds = new Set();
-
-    // Update or create planes
+    // Process planes
     for (const planeData of data.planes) {
-      newPlaneIds.add(planeData.id);
-
-      let state = planes.get(planeData.id);
-      if (!state) {
-        // New plane
-        state = {
-          id: planeData.id,
-          callsign: planeData.callsign,
-          country: planeData.country,
-          lat: planeData.position.lat,
-          lon: planeData.position.lon,
-          heading: planeData.heading,
-          velocity: planeData.velocity_mps,
-          color: planeData.color,
-          extrapolated: planeData.extrapolated,
-          trail: [], // Will build from screen positions
-          screenPos: null,
-        };
-
-        // Initialize trail from data if available
-        if (planeData.trail && planeData.trail.length > 0) {
-          state.trail = planeData.trail.map(p => latLonToScreen(p.lat, p.lon));
-        }
-
-        planes.set(planeData.id, state);
-      } else {
-        // Update existing plane - blend toward new position
+      // Skip if we're already tracking this plane
+      if (planes.has(planeData.id)) {
+        // Optionally update callsign/country if they changed
+        const state = planes.get(planeData.id);
         state.callsign = planeData.callsign;
         state.country = planeData.country;
-        state.heading = planeData.heading;
-        state.velocity = planeData.velocity_mps;
-        state.extrapolated = planeData.extrapolated;
-
-        // Smoothly correct position drift
-        state.lat = planeData.position.lat;
-        state.lon = planeData.position.lon;
+        continue;
       }
-    }
 
-    // Remove planes no longer in data
-    for (const [id] of planes) {
-      if (!newPlaneIds.has(id)) {
-        removePlaneElement(id);
-        planes.delete(id);
-      }
-    }
+      // New plane - calculate trajectory
+      const startLat = planeData.position.lat;
+      const startLon = planeData.position.lon;
+      const heading = planeData.heading;
+      const velocityMps = planeData.velocity_mps || 200; // Default ~400 knots
 
-    // Update count
-    updateCount(data.planes.length);
+      // Calculate where this plane will exit the screen
+      const exit = calculateExitPoint(startLat, startLon, heading);
+
+      // Calculate duration based on distance and speed
+      // Speed multiplier to make planes move faster (2 = twice as fast)
+      const speedMultiplier = 3;
+      const durationMs = (exit.distanceMeters / velocityMps / speedMultiplier) * 1000;
+
+      // Generate curve control point (may be null for straight paths)
+      const curveControl = generateCurveControl(startLat, startLon, exit.lat, exit.lon, heading);
+
+      // Create plane state
+      const startScreenPos = latLonToScreen(startLat, startLon);
+      const state = {
+        id: planeData.id,
+        callsign: planeData.callsign,
+        country: planeData.country,
+        heading: heading,
+        color: planeData.color,
+
+        // Trajectory
+        startLat,
+        startLon,
+        endLat: exit.lat,
+        endLon: exit.lon,
+        curveControl, // null for straight, {lat, lon} for curved
+
+        // Timing
+        startTime: performance.now(),
+        duration: durationMs,
+
+        // Current position (will be interpolated)
+        lat: startLat,
+        lon: startLon,
+        screenPos: startScreenPos,
+        startScreenPos: startScreenPos,
+        progress: 0,
+
+        // Trail history for curved paths
+        trailPoints: [{ x: startScreenPos.x, y: startScreenPos.y }],
+        lastTrailProgress: 0,
+      };
+
+      planes.set(planeData.id, state);
+      console.log(`[NEW] ${planeData.callsign || planeData.id.slice(-6)} heading ${heading}° - journey ${(durationMs/1000).toFixed(0)}s`);
+    }
 
   } catch (e) {
     console.error('Fetch error:', e);
@@ -333,8 +480,6 @@ function resizeCanvas() {
 // ─── Main Entry Point ─────────────────────────────
 async function main() {
   showOverlay('Connecting...');
-
-  // Initialize canvas
   resizeCanvas();
 
   await loadConfig();
@@ -345,21 +490,13 @@ async function main() {
   // Initial fetch
   await fetchFlightData();
 
-  // Poll for updates
+  // Poll for updates (to detect new planes)
   setInterval(fetchFlightData, config.pollIntervalMs);
 }
 
 // ─── Handle Window Resize ─────────────────────────
-let resizeTimeout;
 window.addEventListener('resize', () => {
-  clearTimeout(resizeTimeout);
-  resizeTimeout = setTimeout(() => {
-    resizeCanvas();
-    // Clear trails to avoid distortion
-    for (const state of planes.values()) {
-      state.trail = [];
-    }
-  }, 150);
+  resizeCanvas();
 });
 
 // ─── Start ────────────────────────────────────────

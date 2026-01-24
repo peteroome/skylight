@@ -4,6 +4,9 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  /* WebKit optimizations for Surf browser */
+  -webkit-transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
 }
 
 body {
@@ -18,15 +21,9 @@ body {
   inset: 0;
 }
 
-/* Subtle grid overlay */
+/* Subtle grid overlay - disabled for Pi performance */
 .grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
-  background-size: 80px 80px;
-  pointer-events: none;
+  display: none;
 }
 
 /* Plane container */
@@ -39,6 +36,8 @@ body {
   position: absolute;
   will-change: transform;
   transition: none; /* JS handles animation */
+  transform: translateZ(0); /* Force GPU acceleration */
+  backface-visibility: hidden;
 }
 
 /* Global trails canvas */
@@ -53,9 +52,9 @@ body {
 /* Plane icon */
 .plane-icon {
   position: relative;
-  width: 28px;
-  height: 28px;
-  filter: drop-shadow(0 0 8px var(--plane-color));
+  width: 48px;
+  height: 48px;
+  filter: drop-shadow(0 0 8px var(--plane-color)); /* Single shadow for Pi performance */
 }
 
 .plane-icon svg {
@@ -67,16 +66,16 @@ body {
 /* Label */
 .plane-label {
   position: absolute;
-  top: 32px;
+  top: 54px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.3px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
   color: var(--plane-color);
-  opacity: 0.8;
+  opacity: 0.9;
   white-space: nowrap;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); /* Simpler shadow for Pi */
 }
 
 /* Status display */
