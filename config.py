@@ -24,7 +24,7 @@ MAX_LON = HOME_LON + LON_SPAN
 
 # ─── Filtering ─────────────────────────────────────
 MAX_ALTITUDE_M = 12000
-MAX_PLANES = 4  # Reduced for Pi Zero performance
+MAX_PLANES = 8  # Reduced for Pi Zero performance
 
 # ─── Plane Lifecycle ───────────────────────────────
 TRAIL_POINTS = 200
