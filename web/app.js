@@ -294,7 +294,7 @@ function removePlaneElement(id) {
 
 // ─── Animation Loop ───────────────────────────────
 let lastAnimateTime = 0;
-const TARGET_FPS = 15; // Limit to 15fps for Pi Zero performance
+const TARGET_FPS = 30; // Limit to 15fps for Pi Zero performance
 const FRAME_INTERVAL = 1000 / TARGET_FPS;
 
 function animate(currentTime) {
