@@ -60,3 +60,109 @@ function hideOverlay() {
 function updateCount(count) {
   countEl.textContent = count;
 }
+
+// ─── SVG Plane Icon ───────────────────────────────
+const PLANE_SVG = `
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+</svg>
+`;
+
+// ─── Create Plane Element ─────────────────────────
+function createPlaneElement(id, color) {
+  const el = document.createElement('div');
+  el.className = 'plane';
+  el.id = `plane-${id}`;
+  el.style.setProperty('--plane-color', color);
+
+  // Trail canvas
+  const canvas = document.createElement('canvas');
+  canvas.className = 'plane-trail';
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  el.appendChild(canvas);
+
+  // Icon container
+  const icon = document.createElement('div');
+  icon.className = 'plane-icon';
+  icon.innerHTML = PLANE_SVG;
+  el.appendChild(icon);
+
+  // Label
+  const label = document.createElement('div');
+  label.className = 'plane-label';
+  el.appendChild(label);
+
+  planesContainer.appendChild(el);
+  return el;
+}
+
+// ─── Draw Trail on Canvas ─────────────────────────
+function drawTrail(canvas, trail, color) {
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (trail.length < 2) return;
+
+  // Parse color to RGB
+  const rgb = hexToRgb(color);
+  if (!rgb) return;
+
+  // Draw trail segments with fading opacity
+  for (let i = 0; i < trail.length - 1; i++) {
+    const p1 = trail[i];
+    const p2 = trail[i + 1];
+
+    // Fade based on position in trail (older = dimmer)
+    const progress = i / (trail.length - 1);
+    const alpha = 0.1 + progress * 0.5;
+
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.strokeStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+    ctx.lineWidth = 3 + progress * 4; // Thicker toward plane
+    ctx.lineCap = 'round';
+    ctx.stroke();
+  }
+}
+
+// ─── Hex to RGB Helper ────────────────────────────
+function hexToRgb(hex) {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? {
+    r: parseInt(result[1], 16),
+    g: parseInt(result[2], 16),
+    b: parseInt(result[3], 16),
+  } : null;
+}
+
+// ─── Update Plane Element ─────────────────────────
+function updatePlaneElement(el, state) {
+  const { x, y } = state.screenPos;
+  const heading = state.heading;
+
+  // Position the plane
+  el.style.transform = `translate(${x}px, ${y}px)`;
+
+  // Rotate icon to match heading
+  const icon = el.querySelector('.plane-icon');
+  icon.style.transform = `translate(-50%, -50%) rotate(${heading}deg)`;
+
+  // Update label
+  const label = el.querySelector('.plane-label');
+  const displayName = state.callsign || state.id.toUpperCase();
+  label.textContent = `${displayName} · ${state.country}`;
+
+  // Draw trail
+  const canvas = el.querySelector('.plane-trail');
+  drawTrail(canvas, state.trail, state.color);
+}
+
+// ─── Remove Plane Element ─────────────────────────
+function removePlaneElement(id) {
+  const el = document.getElementById(`plane-${id}`);
+  if (el) {
+    el.remove();
+  }
+}
