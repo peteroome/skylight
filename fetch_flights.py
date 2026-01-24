@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch flight data from OpenSky and write to JSON for browser consumption."""
+"""Fetch flight data from adsb.lol and write to JSON for browser consumption."""
 
 import json
 import math
@@ -16,23 +16,24 @@ import config
 flights: dict = {}
 color_index = 0
 
+# Unit conversion constants
+FEET_TO_METERS = 0.3048
+KNOTS_TO_MPS = 0.5144
+
 
 def fetch_from_api() -> list | None:
-    """Fetch current flights from OpenSky Network API."""
+    """Fetch current flights from adsb.lol API."""
+    url = config.API_URL.format(
+        lat=config.HOME_LAT,
+        lon=config.HOME_LON,
+        radius=config.API_RADIUS_NM,
+    )
     try:
-        response = requests.get(
-            config.API_URL,
-            params={
-                "lamin": config.MIN_LAT,
-                "lamax": config.MAX_LAT,
-                "lomin": config.MIN_LON,
-                "lomax": config.MAX_LON,
-            },
-            timeout=config.API_TIMEOUT_S,
-        )
+        response = requests.get(url, timeout=config.API_TIMEOUT_S)
         if response.status_code == 200:
-            states = response.json().get("states")
-            return states if states else []
+            data = response.json()
+            aircraft = data.get("ac", [])
+            return aircraft if aircraft else []
         print(f"API returned status {response.status_code}")
         return None
     except requests.RequestException as e:
@@ -71,25 +72,42 @@ def extrapolate_position(flight: dict, dt_seconds: float) -> tuple[float, float]
 
 
 def process_states(states: list, now: datetime) -> None:
-    """Process raw API states into flight records."""
+    """Process raw API states (adsb.lol format) into flight records."""
     global color_index
 
-    for state in states:
-        # Skip malformed states
-        if len(state) < 11:
-            continue
-
+    for ac in states:
         # Skip if missing position
-        if state[5] is None or state[6] is None:
+        if "lat" not in ac or "lon" not in ac:
             continue
 
-        icao = state[0]
-        callsign = (state[1] or "").strip()
-        country = state[2] or "Unknown"
-        lon, lat = state[5], state[6]
-        altitude = state[7] or 0
-        velocity = state[9] or 0
-        heading = state[10] or 0
+        # Skip ground traffic
+        if ac.get("alt_baro") == "ground":
+            continue
+
+        icao = ac.get("hex", "").upper()
+        if not icao:
+            continue
+
+        callsign = (ac.get("flight") or "").strip()
+        lat = ac["lat"]
+        lon = ac["lon"]
+
+        # Convert altitude from feet to meters
+        alt_feet = ac.get("alt_baro", 0)
+        if isinstance(alt_feet, str):
+            alt_feet = 0
+        altitude = alt_feet * FEET_TO_METERS
+
+        # Convert ground speed from knots to m/s
+        gs_knots = ac.get("gs", 0) or 0
+        velocity = gs_knots * KNOTS_TO_MPS
+
+        # Heading (track)
+        heading = ac.get("track", 0) or 0
+
+        # Aircraft type/registration for display
+        aircraft_type = ac.get("t", "")
+        registration = ac.get("r", "")
 
         # Filter by altitude
         if altitude > config.MAX_ALTITUDE_M:
@@ -103,7 +121,7 @@ def process_states(states: list, now: datetime) -> None:
             flights[icao] = {
                 "id": icao,
                 "callsign": callsign,
-                "country": country,
+                "country": aircraft_type,  # Use aircraft type instead of country
                 "lat": lat,
                 "lon": lon,
                 "altitude_m": altitude,
@@ -118,7 +136,8 @@ def process_states(states: list, now: datetime) -> None:
             # Update existing flight
             f = flights[icao]
             f["callsign"] = callsign
-            f["country"] = country
+            if aircraft_type:
+                f["country"] = aircraft_type
             f["lat"] = lat
             f["lon"] = lon
             f["altitude_m"] = altitude
@@ -242,7 +261,8 @@ def main() -> None:
     """Main loop: fetch, process, write, repeat."""
     print("Skylight data service starting...")
     print(f"Home: {config.HOME_LAT}, {config.HOME_LON}")
-    print(f"Bounds: {config.MIN_LAT}-{config.MAX_LAT}, {config.MIN_LON}-{config.MAX_LON}")
+    print(f"Search radius: {config.API_RADIUS_NM} nautical miles")
+    print(f"Using adsb.lol API")
 
     # Write browser config once at startup
     write_browser_config()

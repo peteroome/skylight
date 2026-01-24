@@ -4,8 +4,10 @@
 import platform
 
 # ─── Data Fetching ─────────────────────────────────
-API_URL = "https://opensky-network.org/api/states/all"
-API_INTERVAL_S = 15
+# adsb.lol API - free community flight tracking
+API_URL = "https://api.adsb.lol/v2/point/{lat}/{lon}/{radius}"
+API_RADIUS_NM = 25  # Search radius in nautical miles (max 250)
+API_INTERVAL_S = 5  # adsb.lol allows 1 req/sec, we use 5s to be safe
 API_TIMEOUT_S = 10
 
 # ─── Geographic Bounds ─────────────────────────────
