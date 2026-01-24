@@ -233,3 +233,123 @@ function animate(currentTime) {
 
   requestAnimationFrame(animate);
 }
+
+// ─── Fetch Flight Data ────────────────────────────
+async function fetchFlightData() {
+  try {
+    const response = await fetch('flights.json?' + Date.now());
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const data = await response.json();
+    lastUpdate = new Date(data.updated);
+
+    if (data.status === 'error') {
+      if (isConnected) {
+        showOverlay('Connection lost. Reconnecting...');
+        isConnected = false;
+      }
+      return;
+    }
+
+    // Hide overlay on successful data
+    if (!isConnected) {
+      hideOverlay();
+      isConnected = true;
+    }
+
+    // Track which planes are in the new data
+    const newPlaneIds = new Set();
+
+    // Update or create planes
+    for (const planeData of data.planes) {
+      newPlaneIds.add(planeData.id);
+
+      let state = planes.get(planeData.id);
+      if (!state) {
+        // New plane
+        state = {
+          id: planeData.id,
+          callsign: planeData.callsign,
+          country: planeData.country,
+          lat: planeData.position.lat,
+          lon: planeData.position.lon,
+          heading: planeData.heading,
+          velocity: planeData.velocity_mps,
+          color: planeData.color,
+          extrapolated: planeData.extrapolated,
+          trail: [], // Will build from screen positions
+          screenPos: null,
+        };
+
+        // Initialize trail from data if available
+        if (planeData.trail && planeData.trail.length > 0) {
+          state.trail = planeData.trail.map(p => latLonToScreen(p.lat, p.lon));
+        }
+
+        planes.set(planeData.id, state);
+      } else {
+        // Update existing plane - blend toward new position
+        state.callsign = planeData.callsign;
+        state.country = planeData.country;
+        state.heading = planeData.heading;
+        state.velocity = planeData.velocity_mps;
+        state.extrapolated = planeData.extrapolated;
+
+        // Smoothly correct position drift
+        state.lat = planeData.position.lat;
+        state.lon = planeData.position.lon;
+      }
+    }
+
+    // Remove planes no longer in data
+    for (const [id] of planes) {
+      if (!newPlaneIds.has(id)) {
+        removePlaneElement(id);
+        planes.delete(id);
+      }
+    }
+
+    // Update count
+    updateCount(data.planes.length);
+
+  } catch (e) {
+    console.error('Fetch error:', e);
+    if (isConnected) {
+      showOverlay('Reconnecting...');
+      isConnected = false;
+    }
+  }
+}
+
+// ─── Main Entry Point ─────────────────────────────
+async function main() {
+  showOverlay('Connecting...');
+
+  await loadConfig();
+
+  // Start animation loop
+  requestAnimationFrame(animate);
+
+  // Initial fetch
+  await fetchFlightData();
+
+  // Poll for updates
+  setInterval(fetchFlightData, config.pollIntervalMs);
+}
+
+// ─── Handle Window Resize ─────────────────────────
+window.addEventListener('resize', () => {
+  // Resize all trail canvases
+  document.querySelectorAll('.plane-trail').forEach(canvas => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  });
+
+  // Clear trails to avoid distortion
+  for (const state of planes.values()) {
+    state.trail = [];
+  }
+});
+
+// ─── Start ────────────────────────────────────────
+main();
