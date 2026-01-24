@@ -11,6 +11,8 @@ const planesContainer = document.getElementById('planes');
 const countEl = document.getElementById('count');
 const overlayEl = document.getElementById('overlay');
 const overlayTextEl = document.getElementById('overlay-text');
+const trailsCanvas = document.getElementById('trails');
+const trailsCtx = trailsCanvas.getContext('2d');
 
 // ─── Configuration ────────────────────────────────
 async function loadConfig() {
@@ -28,10 +30,10 @@ async function loadConfig() {
       trailFadeSteps: 50,
       home: { lat: 51.4229712, lon: -0.0541772 },
       bounds: {
-        minLat: 51.3029712,
-        maxLat: 51.5429712,
-        minLon: -0.3941772,
-        maxLon: 0.2858228,
+        minLat: 51.1729712,
+        maxLat: 51.6729712,
+        minLon: -0.5041772,
+        maxLon: 0.3958228,
       },
     };
     return true;
@@ -75,14 +77,6 @@ function createPlaneElement(id, color) {
   el.id = `plane-${id}`;
   el.style.setProperty('--plane-color', color);
 
-  // Trail canvas
-  const canvas = document.createElement('canvas');
-  canvas.className = 'plane-trail';
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-  canvas.ctx = canvas.getContext('2d');
-  el.appendChild(canvas);
-
   // Icon container
   const icon = document.createElement('div');
   icon.className = 'plane-icon';
@@ -98,46 +92,53 @@ function createPlaneElement(id, color) {
   return el;
 }
 
-// ─── Draw Trail on Canvas ─────────────────────────
-function drawTrail(canvas, trail, color) {
-  const ctx = canvas.ctx;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  if (trail.length < 2) return;
-
-  // Parse color to RGB
-  const rgb = hexToRgb(color);
-  if (!rgb) return;
-
-  // Draw trail segments with fading opacity
-  for (let i = 0; i < trail.length - 1; i++) {
-    const p1 = trail[i];
-    const p2 = trail[i + 1];
-
-    // Fade based on position in trail (older = dimmer)
-    const progress = i / (trail.length - 1);
-    const alpha = 0.1 + progress * 0.5;
-
-    ctx.beginPath();
-    ctx.moveTo(p1.x, p1.y);
-    ctx.lineTo(p2.x, p2.y);
-    ctx.strokeStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
-    ctx.lineWidth = 3 + progress * 4; // Thicker toward plane
-    ctx.lineCap = 'round';
-    ctx.stroke();
-  }
-}
-
 // ─── Hex to RGB Helper ────────────────────────────
 const HEX_REGEX = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i;
+const colorCache = new Map();
 
 function hexToRgb(hex) {
+  if (colorCache.has(hex)) return colorCache.get(hex);
   const result = HEX_REGEX.exec(hex);
-  return result ? {
+  const rgb = result ? {
     r: parseInt(result[1], 16),
     g: parseInt(result[2], 16),
     b: parseInt(result[3], 16),
   } : null;
+  if (rgb) colorCache.set(hex, rgb);
+  return rgb;
+}
+
+// ─── Draw All Trails ──────────────────────────────
+function drawAllTrails() {
+  // Clear canvas
+  trailsCtx.clearRect(0, 0, trailsCanvas.width, trailsCanvas.height);
+
+  // Draw each plane's trail
+  for (const state of planes.values()) {
+    const trail = state.trail;
+    if (!trail || trail.length < 2) continue;
+
+    const rgb = hexToRgb(state.color);
+    if (!rgb) continue;
+
+    // Draw trail segments with fading opacity
+    for (let i = 0; i < trail.length - 1; i++) {
+      const p1 = trail[i];
+      const p2 = trail[i + 1];
+
+      // Fade based on position in trail (older = dimmer)
+      const progress = i / (trail.length - 1);
+      const alpha = 0.1 + progress * 0.6;
+
+      trailsCtx.beginPath();
+      trailsCtx.moveTo(p1.x, p1.y);
+      trailsCtx.lineTo(p2.x, p2.y);
+      trailsCtx.strokeStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+      trailsCtx.lineWidth = 2 + progress * 6; // Thicker toward plane
+      trailsCtx.lineCap = 'round';
+      trailsCtx.stroke();
+    }
+  }
 }
 
 // ─── Update Plane Element ─────────────────────────
@@ -145,21 +146,17 @@ function updatePlaneElement(el, state) {
   const { x, y } = state.screenPos;
   const heading = state.heading;
 
-  // Position the plane
-  el.style.transform = `translate(${x}px, ${y}px)`;
+  // Position the plane (center it on the icon)
+  el.style.transform = `translate(${x - 14}px, ${y - 14}px)`;
 
   // Rotate icon to match heading
   const icon = el.querySelector('.plane-icon');
-  icon.style.transform = `translate(-50%, -50%) rotate(${heading}deg)`;
+  icon.style.transform = `rotate(${heading}deg)`;
 
   // Update label
   const label = el.querySelector('.plane-label');
   const displayName = state.callsign || state.id.toUpperCase();
   label.textContent = `${displayName} · ${state.country}`;
-
-  // Draw trail
-  const canvas = el.querySelector('.plane-trail');
-  drawTrail(canvas, state.trail, state.color);
 }
 
 // ─── Remove Plane Element ─────────────────────────
@@ -221,7 +218,7 @@ function animate(currentTime) {
         Math.abs(state.screenPos.y - lastTrailPoint.y) > 1) {
       state.trail.push({ x: state.screenPos.x, y: state.screenPos.y });
       // Limit trail length
-      if (state.trail.length > 300) {
+      if (state.trail.length > 500) {
         state.trail.shift();
       }
     }
@@ -233,6 +230,9 @@ function animate(currentTime) {
     }
     updatePlaneElement(el, state);
   }
+
+  // Draw all trails on global canvas
+  drawAllTrails();
 
   requestAnimationFrame(animate);
 }
@@ -324,9 +324,18 @@ async function fetchFlightData() {
   }
 }
 
+// ─── Initialize Canvas Size ───────────────────────
+function resizeCanvas() {
+  trailsCanvas.width = window.innerWidth;
+  trailsCanvas.height = window.innerHeight;
+}
+
 // ─── Main Entry Point ─────────────────────────────
 async function main() {
   showOverlay('Connecting...');
+
+  // Initialize canvas
+  resizeCanvas();
 
   await loadConfig();
 
@@ -345,12 +354,7 @@ let resizeTimeout;
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimeout);
   resizeTimeout = setTimeout(() => {
-    // Resize all trail canvases
-    document.querySelectorAll('.plane-trail').forEach(canvas => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    });
-
+    resizeCanvas();
     // Clear trails to avoid distortion
     for (const state of planes.values()) {
       state.trail = [];

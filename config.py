@@ -13,8 +13,8 @@ API_TIMEOUT_S = 10
 # ─── Geographic Bounds ─────────────────────────────
 HOME_LAT = 51.4229712
 HOME_LON = -0.0541772
-LAT_SPAN = 0.12
-LON_SPAN = 0.34
+LAT_SPAN = 0.25  # ~28km north-south
+LON_SPAN = 0.45  # ~30km east-west
 
 # Calculated bounds
 MIN_LAT = HOME_LAT - LAT_SPAN
