@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skylight</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="sky">
+    <div class="grid"></div>
+    <div id="planes"></div>
+
+    <div class="status" id="status">
+      <span class="status-count" id="count">0</span>
+      <span class="status-label">aircraft overhead</span>
+    </div>
+
+    <div class="compass">
+      <span class="compass-n">N</span>
+    </div>
+
+    <div class="overlay" id="overlay">
+      <div class="overlay-content">
+        <div class="overlay-spinner"></div>
+        <div class="overlay-text" id="overlay-text">Connecting...</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
