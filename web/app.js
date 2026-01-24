@@ -80,6 +80,7 @@ function createPlaneElement(id, color) {
   canvas.className = 'plane-trail';
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
+  canvas.ctx = canvas.getContext('2d');
   el.appendChild(canvas);
 
   // Icon container
@@ -99,7 +100,7 @@ function createPlaneElement(id, color) {
 
 // ─── Draw Trail on Canvas ─────────────────────────
 function drawTrail(canvas, trail, color) {
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.ctx;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   if (trail.length < 2) return;
@@ -128,8 +129,10 @@ function drawTrail(canvas, trail, color) {
 }
 
 // ─── Hex to RGB Helper ────────────────────────────
+const HEX_REGEX = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i;
+
 function hexToRgb(hex) {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  const result = HEX_REGEX.exec(hex);
   return result ? {
     r: parseInt(result[1], 16),
     g: parseInt(result[2], 16),
@@ -172,7 +175,7 @@ function extrapolatePosition(state, dtSeconds) {
   if (state.velocity <= 0) return;
 
   const headingRad = (state.heading * Math.PI) / 180;
-  const cosLat = Math.cos((state.lat * Math.PI) / 180);
+  const cosLat = Math.max(0.0001, Math.cos((state.lat * Math.PI) / 180));
 
   // Convert m/s to degrees/s
   const latSpeed = (state.velocity * Math.cos(headingRad)) / 111000;
@@ -338,17 +341,21 @@ async function main() {
 }
 
 // ─── Handle Window Resize ─────────────────────────
+let resizeTimeout;
 window.addEventListener('resize', () => {
-  // Resize all trail canvases
-  document.querySelectorAll('.plane-trail').forEach(canvas => {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-  });
+  clearTimeout(resizeTimeout);
+  resizeTimeout = setTimeout(() => {
+    // Resize all trail canvases
+    document.querySelectorAll('.plane-trail').forEach(canvas => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    });
 
-  // Clear trails to avoid distortion
-  for (const state of planes.values()) {
-    state.trail = [];
-  }
+    // Clear trails to avoid distortion
+    for (const state of planes.values()) {
+      state.trail = [];
+    }
+  }, 150);
 });
 
 // ─── Start ────────────────────────────────────────
