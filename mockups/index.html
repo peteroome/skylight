@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skylight Mockups</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #1a1a2e;
+      min-height: 100vh;
+      padding: 40px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color: white;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 300;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 40px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 24px;
+    }
+
+    .card {
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+    }
+
+    .card a {
+      display: block;
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .card-preview {
+      height: 180px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 48px;
+    }
+
+    .card-1 .card-preview { background: linear-gradient(180deg, #0a0f1a, #1a2332); }
+    .card-2 .card-preview { background: linear-gradient(180deg, #1a1a2e, #0f3460); }
+    .card-3 .card-preview { background: radial-gradient(ellipse at 50% 100%, #0c1445, #020208); }
+    .card-4 .card-preview { background: #0a0a12; }
+
+    .card-body {
+      padding: 20px;
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 500;
+      margin-bottom: 8px;
+    }
+
+    .card-desc {
+      font-size: 14px;
+      color: rgba(255,255,255,0.6);
+      line-height: 1.5;
+    }
+
+    .instructions {
+      margin-top: 40px;
+      padding: 20px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 8px;
+      font-size: 14px;
+      color: rgba(255,255,255,0.6);
+    }
+
+    .instructions code {
+      background: rgba(255,255,255,0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <h1>Skylight Visual Mockups</h1>
+  <p class="subtitle">Click each style to view the full animation</p>
+
+  <div class="grid">
+    <div class="card card-1">
+      <a href="1-minimal-elegant.html">
+        <div class="card-preview">
+          <svg width="60" height="60" viewBox="0 0 24 24" fill="#64b5f6">
+            <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+          </svg>
+        </div>
+        <div class="card-body">
+          <div class="card-title">1. Minimal / Elegant</div>
+          <div class="card-desc">Clean lines, subtle grid, muted colors with soft glows. Premium radar display aesthetic.</div>
+        </div>
+      </a>
+    </div>
+
+    <div class="card card-2">
+      <a href="2-playful-whimsical.html">
+        <div class="card-preview">
+          <span>🛫</span>
+        </div>
+        <div class="card-body">
+          <div class="card-title">2. Playful / Whimsical</div>
+          <div class="card-desc">Cartoon planes, rainbow trails, twinkling stars, moon and clouds. Fun for kids.</div>
+        </div>
+      </a>
+    </div>
+
+    <div class="card card-3">
+      <a href="3-realistic-immersive.html">
+        <div class="card-preview">
+          <svg width="40" height="40" viewBox="0 0 20 20" fill="none" stroke="#666">
+            <path d="M10 2 L10 18 M4 7 L16 7 M6 16 L14 16" stroke-width="1.5"/>
+            <circle cx="4" cy="7" r="2" fill="#ff3333"/>
+            <circle cx="16" cy="7" r="2" fill="#33ff33"/>
+          </svg>
+        </div>
+        <div class="card-body">
+          <div class="card-title">3. Realistic / Immersive</div>
+          <div class="card-desc">Star field with depth, navigation lights blinking, contrails, atmospheric glow. Like looking at the night sky.</div>
+        </div>
+      </a>
+    </div>
+
+    <div class="card card-4">
+      <a href="4-retro-futuristic.html">
+        <div class="card-preview" style="color: #00ff88; text-shadow: 0 0 20px #00ff88;">
+          <svg width="50" height="50" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M15 3 L15 27 M5 12 L25 12 M10 24 L20 24"/>
+          </svg>
+        </div>
+        <div class="card-body">
+          <div class="card-title">4. Retro Futuristic</div>
+          <div class="card-desc">CRT scan lines, radar sweep, neon vectors, terminal readouts. Synthwave ATC vibes.</div>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <div class="instructions">
+    <strong>To test on Raspberry Pi:</strong><br><br>
+    1. Copy the mockups folder to the Pi<br>
+    2. Run <code>python3 -m http.server 8080</code> in the mockups directory<br>
+    3. Open Chromium to <code>http://localhost:8080</code><br>
+    4. Press F11 for fullscreen
+  </div>
+</body>
+</html>

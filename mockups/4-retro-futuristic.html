@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skylight - Retro Futuristic</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a12;
+      min-height: 100vh;
+      overflow: hidden;
+      font-family: 'Share Tech Mono', 'Courier New', monospace;
+    }
+
+    .screen {
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse at 50% 50%, #0f1a2a 0%, #050810 100%);
+    }
+
+    /* CRT scan lines */
+    .scanlines {
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent 0px,
+        transparent 2px,
+        rgba(0,0,0,0.1) 2px,
+        rgba(0,0,0,0.1) 4px
+      );
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    /* Subtle CRT flicker */
+    .crt-flicker {
+      position: absolute;
+      inset: 0;
+      animation: flicker 0.15s infinite;
+      pointer-events: none;
+      z-index: 101;
+    }
+
+    @keyframes flicker {
+      0%, 100% { opacity: 0; }
+      50% { opacity: 0.01; background: white; }
+    }
+
+    /* Radar grid */
+    .grid {
+      position: absolute;
+      inset: 0;
+    }
+
+    .grid-lines {
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(rgba(0,255,136,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,255,136,0.03) 1px, transparent 1px);
+      background-size: 60px 60px;
+    }
+
+    /* Radar circles */
+    .radar-ring {
+      position: absolute;
+      border: 1px solid rgba(0,255,136,0.08);
+      border-radius: 50%;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    .radar-ring:nth-child(1) { width: 200px; height: 200px; }
+    .radar-ring:nth-child(2) { width: 400px; height: 400px; }
+    .radar-ring:nth-child(3) { width: 600px; height: 600px; }
+    .radar-ring:nth-child(4) { width: 800px; height: 800px; }
+
+    /* Center marker */
+    .center-marker {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 12px;
+      height: 12px;
+    }
+
+    .center-marker::before,
+    .center-marker::after {
+      content: '';
+      position: absolute;
+      background: rgba(0,255,136,0.4);
+    }
+
+    .center-marker::before {
+      width: 12px;
+      height: 2px;
+      top: 5px;
+      left: 0;
+    }
+
+    .center-marker::after {
+      width: 2px;
+      height: 12px;
+      top: 0;
+      left: 5px;
+    }
+
+    /* Radar sweep */
+    .sweep {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 500px;
+      height: 500px;
+      transform-origin: center;
+      animation: sweep 8s linear infinite;
+    }
+
+    .sweep::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 50%;
+      width: 50%;
+      height: 50%;
+      background: conic-gradient(
+        from 0deg,
+        transparent 0deg,
+        rgba(0,255,136,0.1) 30deg,
+        transparent 60deg
+      );
+      transform-origin: bottom left;
+    }
+
+    @keyframes sweep {
+      0% { transform: translate(-50%, -50%) rotate(0deg); }
+      100% { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+
+    /* Vector plane */
+    .plane {
+      position: absolute;
+      will-change: transform;
+    }
+
+    .plane-icon {
+      width: 30px;
+      height: 30px;
+      position: relative;
+    }
+
+    /* Glowing vector aircraft */
+    .plane-icon svg {
+      width: 100%;
+      height: 100%;
+      stroke: currentColor;
+      stroke-width: 1.5;
+      fill: none;
+      filter: drop-shadow(0 0 4px currentColor);
+    }
+
+    .plane-cyan { color: #00ffff; }
+    .plane-magenta { color: #ff00ff; }
+    .plane-green { color: #00ff88; }
+    .plane-yellow { color: #ffff00; }
+
+    /* Vector trail */
+    .trail {
+      position: absolute;
+      height: 2px;
+      transform-origin: right center;
+      right: 28px;
+      top: 14px;
+    }
+
+    .plane-cyan .trail {
+      background: linear-gradient(90deg, transparent, #00ffff);
+      box-shadow: 0 0 8px #00ffff;
+    }
+
+    .plane-magenta .trail {
+      background: linear-gradient(90deg, transparent, #ff00ff);
+      box-shadow: 0 0 8px #ff00ff;
+    }
+
+    .plane-green .trail {
+      background: linear-gradient(90deg, transparent, #00ff88);
+      box-shadow: 0 0 8px #00ff88;
+    }
+
+    .plane-yellow .trail {
+      background: linear-gradient(90deg, transparent, #ffff00);
+      box-shadow: 0 0 8px #ffff00;
+    }
+
+    /* Data label */
+    .label {
+      position: absolute;
+      top: 32px;
+      left: 0;
+      font-size: 10px;
+      color: inherit;
+      white-space: nowrap;
+      text-shadow: 0 0 10px currentColor;
+      opacity: 0.9;
+    }
+
+    .label .callsign {
+      display: block;
+    }
+
+    .label .data {
+      font-size: 8px;
+      opacity: 0.6;
+    }
+
+    /* Flight paths */
+    @keyframes fly1 {
+      0% { transform: translate(-80px, 180px) rotate(35deg); }
+      100% { transform: translate(calc(100vw + 80px), 380px) rotate(35deg); }
+    }
+
+    @keyframes fly2 {
+      0% { transform: translate(calc(100vw + 80px), 150px) rotate(205deg); }
+      100% { transform: translate(-80px, 300px) rotate(205deg); }
+    }
+
+    @keyframes fly3 {
+      0% { transform: translate(200px, -80px) rotate(140deg); }
+      100% { transform: translate(600px, calc(100vh + 80px)) rotate(140deg); }
+    }
+
+    @keyframes fly4 {
+      0% { transform: translate(-80px, 420px) rotate(20deg); }
+      100% { transform: translate(calc(100vw + 80px), 280px) rotate(20deg); }
+    }
+
+    .plane-1 { animation: fly1 50s linear infinite; }
+    .plane-2 { animation: fly2 60s linear infinite; animation-delay: -25s; }
+    .plane-3 { animation: fly3 45s linear infinite; animation-delay: -10s; }
+    .plane-4 { animation: fly4 55s linear infinite; animation-delay: -35s; }
+
+    /* Terminal style readout */
+    .terminal {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      color: #00ff88;
+      font-size: 11px;
+      text-shadow: 0 0 10px #00ff88;
+    }
+
+    .terminal-line {
+      margin-bottom: 4px;
+      opacity: 0.8;
+    }
+
+    .terminal-line .dim {
+      opacity: 0.5;
+    }
+
+    /* Status panel */
+    .status {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      color: #00ff88;
+      font-size: 12px;
+      text-shadow: 0 0 10px #00ff88;
+    }
+
+    .status-count {
+      font-size: 32px;
+      letter-spacing: 4px;
+    }
+
+    .status-label {
+      font-size: 10px;
+      opacity: 0.6;
+      letter-spacing: 2px;
+    }
+
+    /* Clock */
+    .clock {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      color: #00ff88;
+      font-size: 14px;
+      text-shadow: 0 0 10px #00ff88;
+      opacity: 0.8;
+    }
+
+    /* Coordinates */
+    .coords {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      color: #00ff88;
+      font-size: 10px;
+      text-align: right;
+      text-shadow: 0 0 10px #00ff88;
+      opacity: 0.6;
+    }
+
+    /* Border frame */
+    .frame {
+      position: absolute;
+      inset: 15px;
+      border: 1px solid rgba(0,255,136,0.15);
+      pointer-events: none;
+    }
+
+    .frame-corner {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      border-color: rgba(0,255,136,0.4);
+      border-style: solid;
+      border-width: 0;
+    }
+
+    .frame-corner.tl { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
+    .frame-corner.tr { top: -1px; right: -1px; border-top-width: 2px; border-right-width: 2px; }
+    .frame-corner.bl { bottom: -1px; left: -1px; border-bottom-width: 2px; border-left-width: 2px; }
+    .frame-corner.br { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
+  </style>
+</head>
+<body>
+  <div class="screen">
+    <div class="grid">
+      <div class="grid-lines"></div>
+      <div class="radar-ring"></div>
+      <div class="radar-ring"></div>
+      <div class="radar-ring"></div>
+      <div class="radar-ring"></div>
+      <div class="center-marker"></div>
+    </div>
+
+    <div class="sweep"></div>
+
+    <div class="frame">
+      <div class="frame-corner tl"></div>
+      <div class="frame-corner tr"></div>
+      <div class="frame-corner bl"></div>
+      <div class="frame-corner br"></div>
+    </div>
+
+    <!-- Planes -->
+    <div class="plane plane-1 plane-cyan">
+      <div class="trail" style="width: 100px;"></div>
+      <div class="plane-icon">
+        <svg viewBox="0 0 30 30">
+          <path d="M15 3 L15 27 M5 12 L25 12 M10 24 L20 24"/>
+        </svg>
+      </div>
+      <div class="label">
+        <span class="callsign">BA284</span>
+        <span class="data">FL350 · 485kt</span>
+      </div>
+    </div>
+
+    <div class="plane plane-2 plane-magenta">
+      <div class="trail" style="width: 80px;"></div>
+      <div class="plane-icon">
+        <svg viewBox="0 0 30 30">
+          <path d="M15 3 L15 27 M5 12 L25 12 M10 24 L20 24"/>
+        </svg>
+      </div>
+      <div class="label">
+        <span class="callsign">AF1280</span>
+        <span class="data">FL380 · 512kt</span>
+      </div>
+    </div>
+
+    <div class="plane plane-3 plane-green">
+      <div class="trail" style="width: 70px;"></div>
+      <div class="plane-icon">
+        <svg viewBox="0 0 30 30">
+          <path d="M15 3 L15 27 M5 12 L25 12 M10 24 L20 24"/>
+        </svg>
+      </div>
+      <div class="label">
+        <span class="callsign">EZY821</span>
+        <span class="data">FL290 · 448kt</span>
+      </div>
+    </div>
+
+    <div class="plane plane-4 plane-yellow">
+      <div class="trail" style="width: 120px;"></div>
+      <div class="plane-icon">
+        <svg viewBox="0 0 30 30">
+          <path d="M15 3 L15 27 M5 12 L25 12 M10 24 L20 24"/>
+        </svg>
+      </div>
+      <div class="label">
+        <span class="callsign">LH902</span>
+        <span class="data">FL410 · 498kt</span>
+      </div>
+    </div>
+
+    <div class="terminal">
+      <div class="terminal-line">SKYLIGHT <span class="dim">v2.0</span></div>
+      <div class="terminal-line"><span class="dim">STATUS:</span> ONLINE</div>
+      <div class="terminal-line"><span class="dim">FEED:</span> OPENSKY</div>
+    </div>
+
+    <div class="status">
+      <div class="status-count">04</div>
+      <div class="status-label">ACTIVE TRACKS</div>
+    </div>
+
+    <div class="clock" id="clock">00:00:00</div>
+
+    <div class="coords">
+      LAT 51.4230°N<br>
+      LON 0.0542°W
+    </div>
+
+    <div class="scanlines"></div>
+    <div class="crt-flicker"></div>
+  </div>
+
+  <script>
+    function updateClock() {
+      const now = new Date();
+      const h = String(now.getHours()).padStart(2, '0');
+      const m = String(now.getMinutes()).padStart(2, '0');
+      const s = String(now.getSeconds()).padStart(2, '0');
+      document.getElementById('clock').textContent = `${h}:${m}:${s}`;
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+  </script>
+</body>
+</html>

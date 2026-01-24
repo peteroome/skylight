@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skylight - Minimal/Elegant</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: linear-gradient(180deg, #0a0f1a 0%, #1a2332 50%, #0d1420 100%);
+      min-height: 100vh;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    .sky {
+      position: fixed;
+      inset: 0;
+    }
+
+    /* Subtle grid overlay */
+    .grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-size: 80px 80px;
+    }
+
+    /* Plane container */
+    .plane {
+      position: absolute;
+      will-change: transform;
+    }
+
+    /* Clean, geometric plane icon */
+    .plane-icon {
+      width: 24px;
+      height: 24px;
+      position: relative;
+    }
+
+    .plane-icon svg {
+      width: 100%;
+      height: 100%;
+      filter: drop-shadow(0 0 8px currentColor);
+    }
+
+    /* Trail using CSS gradient */
+    .trail {
+      position: absolute;
+      height: 2px;
+      border-radius: 1px;
+      transform-origin: right center;
+      will-change: transform, opacity;
+    }
+
+    /* Label styling */
+    .label {
+      position: absolute;
+      top: 28px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      white-space: nowrap;
+      opacity: 0.7;
+    }
+
+    /* Color themes */
+    .plane-1 { color: #64b5f6; }
+    .plane-1 .trail { background: linear-gradient(90deg, transparent, #64b5f6); }
+    .plane-1 .label { color: #64b5f6; }
+
+    .plane-2 { color: #81c784; }
+    .plane-2 .trail { background: linear-gradient(90deg, transparent, #81c784); }
+    .plane-2 .label { color: #81c784; }
+
+    .plane-3 { color: #ffb74d; }
+    .plane-3 .trail { background: linear-gradient(90deg, transparent, #ffb74d); }
+    .plane-3 .label { color: #ffb74d; }
+
+    .plane-4 { color: #f06292; }
+    .plane-4 .trail { background: linear-gradient(90deg, transparent, #f06292); }
+    .plane-4 .label { color: #f06292; }
+
+    /* Smooth animation */
+    @keyframes fly1 {
+      0% { transform: translate(-100px, 200px) rotate(25deg); }
+      100% { transform: translate(calc(100vw + 100px), 400px) rotate(25deg); }
+    }
+
+    @keyframes fly2 {
+      0% { transform: translate(calc(100vw + 100px), 150px) rotate(195deg); }
+      100% { transform: translate(-100px, 250px) rotate(195deg); }
+    }
+
+    @keyframes fly3 {
+      0% { transform: translate(200px, -100px) rotate(135deg); }
+      100% { transform: translate(600px, calc(100vh + 100px)) rotate(135deg); }
+    }
+
+    @keyframes fly4 {
+      0% { transform: translate(-100px, 500px) rotate(15deg); }
+      100% { transform: translate(calc(100vw + 100px), 300px) rotate(15deg); }
+    }
+
+    .plane-1 { animation: fly1 45s linear infinite; }
+    .plane-2 { animation: fly2 55s linear infinite; animation-delay: -20s; }
+    .plane-3 { animation: fly3 40s linear infinite; animation-delay: -10s; }
+    .plane-4 { animation: fly4 50s linear infinite; animation-delay: -30s; }
+
+    /* Compass */
+    .compass {
+      position: fixed;
+      bottom: 40px;
+      right: 40px;
+      width: 60px;
+      height: 60px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      color: rgba(255,255,255,0.3);
+      letter-spacing: 1px;
+    }
+
+    .compass::before {
+      content: 'N';
+      position: absolute;
+      top: 8px;
+    }
+
+    /* Info panel */
+    .info {
+      position: fixed;
+      bottom: 40px;
+      left: 40px;
+      color: rgba(255,255,255,0.4);
+      font-size: 11px;
+      letter-spacing: 0.5px;
+    }
+
+    .info .count {
+      font-size: 28px;
+      font-weight: 200;
+      color: rgba(255,255,255,0.6);
+      display: block;
+      margin-bottom: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="sky">
+    <div class="grid"></div>
+
+    <div class="plane plane-1">
+      <div class="trail" style="width: 150px; right: 24px; top: 11px; opacity: 0.6;"></div>
+      <div class="plane-icon">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+        </svg>
+      </div>
+      <div class="label">BA284 · UK</div>
+    </div>
+
+    <div class="plane plane-2">
+      <div class="trail" style="width: 120px; right: 24px; top: 11px; opacity: 0.6;"></div>
+      <div class="plane-icon">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+        </svg>
+      </div>
+      <div class="label">AF1280 · FR</div>
+    </div>
+
+    <div class="plane plane-3">
+      <div class="trail" style="width: 100px; right: 24px; top: 11px; opacity: 0.6;"></div>
+      <div class="plane-icon">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+        </svg>
+      </div>
+      <div class="label">EZY821 · UK</div>
+    </div>
+
+    <div class="plane plane-4">
+      <div class="trail" style="width: 180px; right: 24px; top: 11px; opacity: 0.6;"></div>
+      <div class="plane-icon">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+        </svg>
+      </div>
+      <div class="label">LH902 · DE</div>
+    </div>
+
+    <div class="compass"></div>
+
+    <div class="info">
+      <span class="count">4</span>
+      aircraft overhead
+    </div>
+  </div>
+</body>
+</html>
