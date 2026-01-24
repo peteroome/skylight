@@ -1,0 +1,193 @@
+/* web/styles.css */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: linear-gradient(180deg, #0a0f1a 0%, #1a2332 50%, #0d1420 100%);
+  min-height: 100vh;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+
+#sky {
+  position: fixed;
+  inset: 0;
+}
+
+/* Subtle grid overlay */
+.grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: 80px 80px;
+  pointer-events: none;
+}
+
+/* Plane container */
+#planes {
+  position: absolute;
+  inset: 0;
+}
+
+.plane {
+  position: absolute;
+  will-change: transform;
+  transition: none; /* JS handles animation */
+}
+
+/* Trail canvas */
+.plane-trail {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* Plane icon */
+.plane-icon {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  filter: drop-shadow(0 0 8px var(--plane-color));
+}
+
+.plane-icon svg {
+  width: 100%;
+  height: 100%;
+  fill: var(--plane-color);
+}
+
+/* Label */
+.plane-label {
+  position: absolute;
+  top: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  color: var(--plane-color);
+  opacity: 0.8;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+/* Status display */
+.status {
+  position: fixed;
+  bottom: 40px;
+  left: 40px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  letter-spacing: 0.5px;
+}
+
+.status-count {
+  font-size: 32px;
+  font-weight: 200;
+  color: rgba(255, 255, 255, 0.7);
+  display: block;
+  margin-bottom: 4px;
+}
+
+.status-label {
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 10px;
+}
+
+/* Compass */
+.compass {
+  position: fixed;
+  bottom: 40px;
+  right: 40px;
+  width: 50px;
+  height: 50px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.compass-n {
+  position: absolute;
+  top: 6px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.3);
+  letter-spacing: 1px;
+}
+
+/* Connection overlay */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 15, 26, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s, visibility 0.3s;
+  z-index: 100;
+}
+
+.overlay.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.overlay-content {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.overlay-spinner {
+  width: 40px;
+  height: 40px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-top-color: rgba(255, 255, 255, 0.4);
+  border-radius: 50%;
+  margin: 0 auto 16px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.overlay-text {
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+
+/* Clear skies state */
+.clear-skies {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  color: rgba(255, 255, 255, 0.3);
+  display: none;
+}
+
+.clear-skies.visible {
+  display: block;
+}
+
+.clear-skies-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.clear-skies-text {
+  font-size: 14px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
