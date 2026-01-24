@@ -59,6 +59,10 @@ def extrapolate_position(flight: dict, dt_seconds: float) -> tuple[float, float]
     heading_rad = math.radians(heading)
     cos_lat = math.cos(math.radians(lat))
 
+    # Guard against division by zero at poles
+    if abs(cos_lat) < 1e-10:
+        return lat, lon
+
     # Convert m/s to degrees/s
     lat_speed = velocity * math.cos(heading_rad) / 111000
     lon_speed = velocity * math.sin(heading_rad) / (111000 * cos_lat)
@@ -71,6 +75,10 @@ def process_states(states: list, now: datetime) -> None:
     global color_index
 
     for state in states:
+        # Skip malformed states
+        if len(state) < 11:
+            continue
+
         # Skip if missing position
         if state[5] is None or state[6] is None:
             continue
@@ -90,7 +98,7 @@ def process_states(states: list, now: datetime) -> None:
         if icao not in flights:
             # New flight - assign color
             color = config.PLANE_COLORS[color_index % len(config.PLANE_COLORS)]
-            color_index += 1
+            color_index = (color_index + 1) % len(config.PLANE_COLORS)
 
             flights[icao] = {
                 "id": icao,
@@ -257,7 +265,11 @@ def main() -> None:
 
         prune_stale_flights(now)
         output = build_output(now, status)
-        write_json(output)
+
+        try:
+            write_json(output)
+        except (OSError, PermissionError) as e:
+            print(f"[{now.strftime('%H:%M:%S')}] Failed to write data file: {e}")
 
         time.sleep(config.API_INTERVAL_S)
 
