@@ -166,3 +166,70 @@ function removePlaneElement(id) {
     el.remove();
   }
 }
+
+// ─── Velocity Extrapolation ───────────────────────
+function extrapolatePosition(state, dtSeconds) {
+  if (state.velocity <= 0) return;
+
+  const headingRad = (state.heading * Math.PI) / 180;
+  const cosLat = Math.cos((state.lat * Math.PI) / 180);
+
+  // Convert m/s to degrees/s
+  const latSpeed = (state.velocity * Math.cos(headingRad)) / 111000;
+  const lonSpeed = (state.velocity * Math.sin(headingRad)) / (111000 * cosLat);
+
+  state.lat += latSpeed * dtSeconds;
+  state.lon += lonSpeed * dtSeconds;
+}
+
+// ─── Animation Loop ───────────────────────────────
+let lastFrameTime = 0;
+
+function animate(currentTime) {
+  if (!lastFrameTime) lastFrameTime = currentTime;
+  const dtSeconds = (currentTime - lastFrameTime) / 1000;
+  lastFrameTime = currentTime;
+
+  // Cap dt to prevent huge jumps after tab switching
+  const cappedDt = Math.min(dtSeconds, 0.1);
+
+  // Update each plane
+  for (const [id, state] of planes) {
+    // Extrapolate position based on velocity
+    extrapolatePosition(state, cappedDt);
+
+    // Convert to screen coordinates
+    const targetPos = latLonToScreen(state.lat, state.lon);
+
+    // Smooth interpolation toward target
+    if (!state.screenPos) {
+      state.screenPos = targetPos;
+    } else {
+      const factor = config.smoothingFactor;
+      state.screenPos.x += (targetPos.x - state.screenPos.x) * factor;
+      state.screenPos.y += (targetPos.y - state.screenPos.y) * factor;
+    }
+
+    // Add to trail (screen coordinates)
+    if (!state.trail) state.trail = [];
+    const lastTrailPoint = state.trail[state.trail.length - 1];
+    if (!lastTrailPoint ||
+        Math.abs(state.screenPos.x - lastTrailPoint.x) > 1 ||
+        Math.abs(state.screenPos.y - lastTrailPoint.y) > 1) {
+      state.trail.push({ x: state.screenPos.x, y: state.screenPos.y });
+      // Limit trail length
+      if (state.trail.length > 300) {
+        state.trail.shift();
+      }
+    }
+
+    // Update DOM
+    let el = document.getElementById(`plane-${id}`);
+    if (!el) {
+      el = createPlaneElement(id, state.color);
+    }
+    updatePlaneElement(el, state);
+  }
+
+  requestAnimationFrame(animate);
+}
