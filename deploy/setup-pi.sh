@@ -15,6 +15,20 @@ if ! grep -q "gpu_mem=128" /boot/firmware/config.txt 2>/dev/null; then
   echo "gpu_mem=128" | sudo tee -a /boot/firmware/config.txt
 fi
 
+# Disable screensaver - remove xscreensaver entirely
+echo "Disabling screensaver..."
+sudo apt remove -y xscreensaver xscreensaver-data xscreensaver-data-extra 2>/dev/null || true
+sudo rm -f /etc/xdg/autostart/xscreensaver.desktop
+rm -f ~/.config/autostart/xscreensaver.desktop
+
+# Disable screen blanking via lightdm (if present)
+if [ -d /etc/lightdm/lightdm.conf.d ]; then
+  sudo tee /etc/lightdm/lightdm.conf.d/10-blanking.conf > /dev/null <<EOF
+[SeatDefaults]
+xserver-command=X -s 0 -dpms
+EOF
+fi
+
 # Hide mouse cursor automatically
 mkdir -p ~/.config/lxsession/LXDE-pi
 echo "@unclutter -idle 0" >> ~/.config/lxsession/LXDE-pi/autostart 2>/dev/null || true
